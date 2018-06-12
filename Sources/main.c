@@ -29,7 +29,7 @@
 // CPU module - contains low level hardware initialization routines
 #include "Cpu.h"
 
-// Simple OS
+// Simple OStest
 #include "OS.h"
 
 // Analog functions
