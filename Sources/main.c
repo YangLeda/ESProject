@@ -51,6 +51,9 @@
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
 OS_THREAD_STACK(LPTMRThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 
 // Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {1, 2};
@@ -126,8 +129,8 @@ static void InitModulesThread(void* pData)
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
 
-  // Initialize the low power timer to tick every 10 ms
-  bool lptmrInitResult = LPTMR_Init(500);
+  // Initialize the low power timer to tick every 1 ms
+  bool lptmrInitResult = LPTMR_Init(1);
 
   // Orange LED on if all init success
   if (ledsInitResult && packetInitResult && flashInitResult && analogInitResult && lptmrInitResult)
@@ -141,6 +144,12 @@ static void InitModulesThread(void* pData)
     Flash_Write16((uint16*) NvTowerNb, TOWER_NUMBER);
     Flash_Write16((uint16*) NvTowerMd, 0x01);
   }
+
+  // Send startup packets
+  Packet_Put(0x04, 0, 0, 0); // Special - Startup
+  Packet_Put(0x09, 'v', 1, 0); // Special - Version number
+  Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi); // Tower Number
+  Packet_Put(0x0D, 1, NvTowerMd->s.Lo, NvTowerMd->s.Hi); // Tower Mode
 
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
@@ -166,35 +175,43 @@ void AnalogLoopbackThread(void* pData)
   }
 }
 
+/*! @brief Routine to receive and handle packets.
+ *
+ *  @param pData is not used but is required by the OS to create a thread.
+ */
+void PacketThread(void* data)
+{
+  for (;;)
+  {
+    if (Packet_Get())
+      Handle_Packet();
+  }
+}
+
 /*lint -save  -e970 Disable MISRA rule (6.3) checking. */
 int main(void)
 /*lint -restore Enable MISRA rule (6.3) checking. */
 {
   OS_ERROR error;
 
-  // Initialise low-level clocks etc using Processor Expert code
+  // Initialize low-level clocks etc using Processor Expert code
   PE_low_level_init();
 
   // Initialize the RTOS
   OS_Init(CPU_CORE_CLK_HZ, true);
 
-  // Create module initialisation thread
-  error = OS_ThreadCreate(InitModulesThread,
-                          NULL,
-                          &InitModulesThreadStack[THREAD_STACK_SIZE - 1],
-                          0); // Highest priority
-
-  // Create threads for analog loopback channels
+  // Create InitModules thread
+  error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
+  // Create AnalogLoopback threads
   for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
-  {
-    error = OS_ThreadCreate(AnalogLoopbackThread,
-                            &AnalogThreadData[threadNb],
-                            &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],
-                            ANALOG_THREAD_PRIORITIES[threadNb]);
-  }
-
-  //
-  error = OS_ThreadCreate(LPTMRThread, NULL, &LPTMRThreadStack[THREAD_STACK_SIZE-1], 4);
+    error = OS_ThreadCreate(AnalogLoopbackThread, &AnalogThreadData[threadNb],
+                            &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1], ANALOG_THREAD_PRIORITIES[threadNb]);
+  // Create LPTMR thread
+  error = OS_ThreadCreate(LPTMRThread, NULL, &LPTMRThreadStack[THREAD_STACK_SIZE-1], 3);
+  // Create Packet handling threads
+  error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE-1], 4);
+  error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 5);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 6);
 
   // Start multithreading - never returns!
   OS_Start();

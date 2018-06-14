@@ -15,6 +15,7 @@
 #include "PE_Types.h"
 #include "types.h"
 #include "UART.h"
+#include "Cpu.h"
 
 // Packet structure
 #define PACKET_NB_BYTES 5
@@ -69,8 +70,6 @@ extern const uint8_t PACKET_ACK_MASK;
 extern uint16union_t* volatile NvTowerNb;
 extern uint16union_t* volatile NvTowerMd;
 
-// Semaphore of put packet
-OS_ECB *PacketPutSem;
 
 /*! @brief Initializes the packets by calling the initialization routines of the supporting software modules.
  *

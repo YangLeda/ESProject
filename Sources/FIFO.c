@@ -19,8 +19,6 @@ void FIFO_Init (TFIFO * const FIFO)
 {
   FIFO->Start = FIFO->End = 0;
   FIFO->NbBytes = 0;
-  // Init semaphore to buffer access
-  FIFO->BufferAccessSem = OS_SemaphoreCreate(1);
   // Init semaphore to space available
   FIFO->SpaceAvailableSem = OS_SemaphoreCreate(FIFO_SIZE);
   // Init semaphore to no item available
@@ -37,7 +35,7 @@ void FIFO_Init (TFIFO * const FIFO)
 void FIFO_Put (TFIFO * const FIFO, const uint8_t data)
 {
   OS_SemaphoreWait(FIFO->SpaceAvailableSem, 0);
-  OS_SemaphoreWait(FIFO->BufferAccessSem, 0);
+  EnterCritical();
 
   FIFO->Buffer[FIFO->End] = data; // Put data into FIFO
   if (FIFO->End == FIFO_SIZE - 1)
@@ -46,7 +44,7 @@ void FIFO_Put (TFIFO * const FIFO, const uint8_t data)
     FIFO->End ++;
   FIFO->NbBytes ++;
 
-  OS_SemaphoreSignal(FIFO->BufferAccessSem);
+  ExitCritical();
   OS_SemaphoreSignal(FIFO->ItemsAvailableSem);
 }
 
@@ -60,7 +58,8 @@ void FIFO_Put (TFIFO * const FIFO, const uint8_t data)
 void FIFO_Get (TFIFO * const FIFO, uint8_t * const dataPtr)
 {
   OS_SemaphoreWait(FIFO->ItemsAvailableSem, 0);
-  OS_SemaphoreWait(FIFO->BufferAccessSem, 0);
+  OS_DisableInterrupts();
+  EnterCritical();
 
   *dataPtr = FIFO->Buffer[FIFO->Start]; // Get the data
   if (FIFO->Start == FIFO_SIZE - 1)
@@ -69,6 +68,6 @@ void FIFO_Get (TFIFO * const FIFO, uint8_t * const dataPtr)
     FIFO->Start ++;
   FIFO->NbBytes --;
 
-  OS_SemaphoreSignal(FIFO->BufferAccessSem);
+  ExitCritical();
   OS_SemaphoreSignal(FIFO->SpaceAvailableSem);
 }
