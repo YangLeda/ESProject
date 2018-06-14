@@ -54,6 +54,8 @@ bool LPTMR_Init(const uint16_t count)
 
   //Turn on LPTMR and start counting
   LPTMR0_CSR |= LPTMR_CSR_TEN_MASK;
+
+  return TRUE;
 }
 
 

@@ -26,7 +26,7 @@
  */
 /* MODULE main */
 
-// CPU module - contains low level hardware initialization routines
+// CPU module contains low level hardware initialization routines
 #include "Cpu.h"
 // Simple OS
 #include "OS.h"
@@ -36,6 +36,10 @@
 #include "LPTMR.h"
 // LED functions
 #include "LEDs.h"
+// Packet functions
+#include "Packet.h"
+// Flash functions
+#include "Flash.h"
 
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
 #define THREAD_STACK_SIZE 100
@@ -44,15 +48,22 @@
 
 
 // Thread stacks
-// Init modules thread stack
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
-// Analog thread stacks
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
-// LPTMR thread stack
 OS_THREAD_STACK(LPTMRThreadStack, THREAD_STACK_SIZE);
 
-// Thread priorities. 0 = highest priority
+// Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {1, 2};
+
+// Baud rate
+const static uint32_t BAUD = 115200;
+
+// Tower number
+const static uint32_t TOWER_NUMBER = 2324;
+
+// Non-volatile variables for tower number and tower mode
+uint16union_t* volatile NvTowerNb;
+uint16union_t* volatile NvTowerMd;
 
 /*! @brief Data structure used to pass Analog configuration to a user thread
  *
@@ -89,6 +100,7 @@ void LPTMRThread(void* data)
   {
     OS_SemaphoreWait(LPTMRSem, 0);
 
+    // Toggle green LED
     LEDs_Toggle(LED_GREEN);
     // Signal the analog channels to take a sample
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
@@ -103,18 +115,32 @@ void LPTMRThread(void* data)
  */
 static void InitModulesThread(void* pData)
 {
-  //
-  bool ledsInitResult = LEDs_Init();
 
-  // Analog
-  (void)Analog_Init(CPU_BUS_CLK_HZ);
+  // Initialize modules
+  bool ledsInitResult = LEDs_Init();
+  bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
+  bool flashInitResult = Flash_Init();
+  bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
 
-  // Initialise the low power timer to tick every 10 ms
-  LPTMR_Init(500);
+  // Initialize the low power timer to tick every 10 ms
+  bool lptmrInitResult = LPTMR_Init(500);
+
+  // Orange LED on if all init success
+  if (ledsInitResult && packetInitResult && flashInitResult && analogInitResult && lptmrInitResult)
+    LEDs_On(LED_BLUE);
+
+  // Set tower number and tower mode
+  Flash_AllocateVar((volatile void**) &NvTowerNb, sizeof(*NvTowerNb));
+  Flash_AllocateVar((volatile void**) &NvTowerMd, sizeof(*NvTowerMd));
+  if (NvTowerNb->l == 0xFFFF || NvTowerMd->l == 0xFFFF) // Not set before
+  {
+    Flash_Write16((uint16*) NvTowerNb, TOWER_NUMBER);
+    Flash_Write16((uint16*) NvTowerMd, 0x01);
+  }
 
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
