@@ -184,7 +184,10 @@ void PacketThread(void* data)
   for (;;)
   {
     if (Packet_Get())
+    {
+      LEDs_Toggle(LED_BLUE);
       Handle_Packet();
+    }
   }
 }
 
