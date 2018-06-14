@@ -45,7 +45,10 @@
 #define THREAD_STACK_SIZE 100
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 2
-
+// Baud rate
+#define BAUD = 115200;
+// Tower number
+#define TOWER_NUMBER = 2324;
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -58,11 +61,7 @@ OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 // Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {1, 2};
 
-// Baud rate
-const static uint32_t BAUD = 115200;
 
-// Tower number
-const static uint32_t TOWER_NUMBER = 2324;
 
 // Non-volatile variables for tower number and tower mode
 uint16union_t* volatile NvTowerNb;
