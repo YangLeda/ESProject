@@ -19,6 +19,9 @@ static TFIFO TxFIFO;
 static OS_ECB *RxSem;
 static OS_ECB *TxSem;
 
+// Data read from UART2_D
+static uint8_t rxData;
+
 /*! @brief Sets up the UART interface before first use.
  *
  *  @param baudRate The desired baud rate in bits/sec.
@@ -148,8 +151,9 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear RDRF flag by reading the status register
     if (UART2_S1 & UART_S1_RDRF_MASK)
     {
-      OS_SemaphoreSignal(RxSem);
       UART2_C2 &= ~UART_C2_RIE_MASK; // Disable Receiver Full Interrupt
+      rxData = UART2_D;
+      OS_SemaphoreSignal(RxSem);
     }
 
   // Transmit
@@ -157,8 +161,8 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear TDRE flag by reading the status register
     if (UART2_S1 & UART_S1_TDRE_MASK)
     {
-      OS_SemaphoreSignal(TxSem);
       UART2_C2 &= ~UART_C2_TIE_MASK; // Disable Transmitter Interrupt
+      OS_SemaphoreSignal(TxSem);
     }
 
   OS_ISRExit();
