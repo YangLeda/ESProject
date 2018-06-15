@@ -116,8 +116,8 @@ void UARTReceiveThread(void *data)
   for(;;)
   {
     OS_SemaphoreWait(RxSem, 0);
-    FIFO_Put(&RxFIFO, UART2_D);
-    UART2_C2 |= UART_C2_RIE_MASK; // Enable Receiver Full Interrupt
+    FIFO_Put(&RxFIFO, rxData);
+    //UART2_C2 |= UART_C2_RIE_MASK; // Enable Receiver Full Interrupt
   }
 }
 
@@ -128,13 +128,11 @@ void UARTReceiveThread(void *data)
  */
 void UARTTransmitThread(void *data)
 {
-  uint8_t txData;
   for(;;)
   {
     OS_SemaphoreWait(TxSem, 0);
-    FIFO_Get(&TxFIFO, &txData);
-    UART2_D = txData;
-    UART2_C2 |= UART_C2_TIE_MASK; // Enable Transmitter Interrupt
+    FIFO_Get(&TxFIFO, &UART2_D);
+    //UART2_C2 |= UART_C2_TIE_MASK; // Enable Transmitter Interrupt
   }
 }
 
@@ -151,7 +149,7 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear RDRF flag by reading the status register
     if (UART2_S1 & UART_S1_RDRF_MASK)
     {
-      UART2_C2 &= ~UART_C2_RIE_MASK; // Disable Receiver Full Interrupt
+      //UART2_C2 &= ~UART_C2_RIE_MASK; // Disable Receiver Full Interrupt
       rxData = UART2_D;
       OS_SemaphoreSignal(RxSem);
     }
@@ -161,7 +159,7 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear TDRE flag by reading the status register
     if (UART2_S1 & UART_S1_TDRE_MASK)
     {
-      UART2_C2 &= ~UART_C2_TIE_MASK; // Disable Transmitter Interrupt
+      //UART2_C2 &= ~UART_C2_TIE_MASK; // Disable Transmitter Interrupt
       OS_SemaphoreSignal(TxSem);
     }
 
