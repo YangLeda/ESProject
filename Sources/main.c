@@ -40,6 +40,8 @@
 #include "Packet.h"
 // Flash functions
 #include "Flash.h"
+// Algorithms
+#include "algorithms.h"
 
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
 #define THREAD_STACK_SIZE 1000
@@ -49,6 +51,7 @@
 #define TOWER_NUMBER 2324
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 3
+
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -60,7 +63,6 @@ OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 
 // Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
-
 
 
 // Non-volatile variables for tower number and tower mode
@@ -137,6 +139,7 @@ static void InitModulesThread(void* pData)
   Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi); // Tower Number
   Packet_Put(0x0D, 1, NvTowerMd->s.Lo, NvTowerMd->s.Hi); // Tower Mode
 
+
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
 }
@@ -169,12 +172,21 @@ void AnalogThread(void* pData)
   for (;;)
   {
     int16_t analogInputValue;
+    int16_t realVoltage;
+    uint16_t rms;
 
     (void)OS_SemaphoreWait(analogData->semaphore, 0);
+
     // Get analog sample
     Analog_Get(analogData->channelNb, &analogInputValue);
-    // Put analog sample
-    Analog_Put(analogData->channelNb, analogInputValue);
+
+    // Real voltage = analogInputValue / 3276.7
+    realVoltage = analogInputValue * 305 / 1e3;
+
+    rms = Algorithm_RMS(realVoltage);
+
+    Packet_Put(0xff, analogData->channelNb, rms >> 8, rms);
+
   }
 }
 
@@ -211,7 +223,7 @@ int main(void)
   // Create UARTTransmit thread
   error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 2);
   // Create Analog threads
-  for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
+  for (uint8_t threadNb = 0; threadNb < 1; threadNb++)
     error = OS_ThreadCreate(AnalogThread,
                             &AnalogThreadData[threadNb],
                             &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],

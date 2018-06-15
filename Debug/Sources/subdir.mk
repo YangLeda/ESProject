@@ -9,6 +9,7 @@ C_SRCS += \
 ../Sources/LEDs.c \
 ../Sources/PIT.c \
 ../Sources/UART.c \
+../Sources/algorithms.c \
 ../Sources/main.c \
 ../Sources/packet.c 
 
@@ -18,6 +19,7 @@ OBJS += \
 ./Sources/LEDs.o \
 ./Sources/PIT.o \
 ./Sources/UART.o \
+./Sources/algorithms.o \
 ./Sources/main.o \
 ./Sources/packet.o 
 
@@ -27,6 +29,7 @@ C_DEPS += \
 ./Sources/LEDs.d \
 ./Sources/PIT.d \
 ./Sources/UART.d \
+./Sources/algorithms.d \
 ./Sources/main.d \
 ./Sources/packet.d 
 

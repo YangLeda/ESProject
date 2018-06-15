@@ -1,3 +1,15 @@
+/*! @file
+ *
+ *  @brief Routines for controlling Periodic Interrupt Timer (PIT) on the TWR-K70F120M.
+ *
+ *  This contains the functions for operating the periodic interrupt timer (PIT).
+ *
+ *  @author Leda Yang
+ *  @date 2018-06-25
+ */
+
+#include "algorithms.h"
+
 // uint/int?
 
 static uint16_t rms = 2.5;
