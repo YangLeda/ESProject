@@ -42,6 +42,9 @@ bool UART_Init(const uint32_t baudRate, const uint32_t moduleClk)
   // Enable clock for PORTE
   SIM_SCGC5 |= SIM_SCGC5_PORTE_MASK;
 
+  UART2_C2 &= ~UART_C2_TE_MASK;
+  UART2_C2 &= ~UART_C2_RE_MASK;
+
   // Enable UART2_TXD function on PTE16, UART is ALT3 function for this pin
   PORTE_PCR16 = PORT_PCR_MUX(0x3);
 
@@ -69,13 +72,15 @@ bool UART_Init(const uint32_t baudRate, const uint32_t moduleClk)
   UART2_C4 = temp |  UART_C4_BRFA(brfa);
 
   // Enable receive and transmit interrupts
-  UART2_C2 |= (UART_C2_TIE_MASK | UART_C2_RIE_MASK);
-  // Enable receiver and transmitter
-  UART2_C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK );
+  UART2_C2 |= UART_C2_TIE_MASK;
+  UART2_C2 |= UART_C2_RIE_MASK;
 
   //Initialize NVIC
   NVICICPR1 = (1 << (49 % 32));
   NVICISER1 = (1 << (49 % 32));
+
+  // Enable receiver and transmitter
+  UART2_C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK );
 
   // FIFOs
   FIFO_Init(&RxFIFO);
@@ -117,7 +122,7 @@ void UARTReceiveThread(void *data)
   {
     OS_SemaphoreWait(RxSem, 0);
     FIFO_Put(&RxFIFO, rxData);
-    //UART2_C2 |= UART_C2_RIE_MASK; // Enable Receiver Full Interrupt
+    UART2_C2 |= UART_C2_RIE_MASK; // Enable Receiver Full Interrupt
   }
 }
 
@@ -128,11 +133,13 @@ void UARTReceiveThread(void *data)
  */
 void UARTTransmitThread(void *data)
 {
+  uint8_t txData;
   for(;;)
   {
     OS_SemaphoreWait(TxSem, 0);
-    FIFO_Get(&TxFIFO, &UART2_D);
-    //UART2_C2 |= UART_C2_TIE_MASK; // Enable Transmitter Interrupt
+    FIFO_Get(&TxFIFO, &txData);
+    UART2_D = txData;
+    UART2_C2 |= UART_C2_TIE_MASK; // Enable Transmitter Interrupt
   }
 }
 
@@ -149,7 +156,7 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear RDRF flag by reading the status register
     if (UART2_S1 & UART_S1_RDRF_MASK)
     {
-      //UART2_C2 &= ~UART_C2_RIE_MASK; // Disable Receiver Full Interrupt
+      UART2_C2 &= ~UART_C2_RIE_MASK; // Disable Receiver Full Interrupt
       rxData = UART2_D;
       OS_SemaphoreSignal(RxSem);
     }
@@ -159,7 +166,7 @@ void __attribute__ ((interrupt)) UART_ISR(void)
     // Clear TDRE flag by reading the status register
     if (UART2_S1 & UART_S1_TDRE_MASK)
     {
-      //UART2_C2 &= ~UART_C2_TIE_MASK; // Disable Transmitter Interrupt
+      UART2_C2 &= ~UART_C2_TIE_MASK; // Disable Transmitter Interrupt
       OS_SemaphoreSignal(TxSem);
     }
 

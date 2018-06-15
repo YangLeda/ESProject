@@ -7,7 +7,7 @@ C_SRCS += \
 ../Sources/FIFO.c \
 ../Sources/Flash.c \
 ../Sources/LEDs.c \
-../Sources/LPTMR.c \
+../Sources/PIT.c \
 ../Sources/UART.c \
 ../Sources/main.c \
 ../Sources/packet.c 
@@ -16,7 +16,7 @@ OBJS += \
 ./Sources/FIFO.o \
 ./Sources/Flash.o \
 ./Sources/LEDs.o \
-./Sources/LPTMR.o \
+./Sources/PIT.o \
 ./Sources/UART.o \
 ./Sources/main.o \
 ./Sources/packet.o 
@@ -25,7 +25,7 @@ C_DEPS += \
 ./Sources/FIFO.d \
 ./Sources/Flash.d \
 ./Sources/LEDs.d \
-./Sources/LPTMR.d \
+./Sources/PIT.d \
 ./Sources/UART.d \
 ./Sources/main.d \
 ./Sources/packet.d 

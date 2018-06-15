@@ -33,7 +33,7 @@
 // Analog functions
 #include "analog.h"
 // LPTimer functions
-#include "LPTMR.h"
+#include "PIT.h"
 // LED functions
 #include "LEDs.h"
 // Packet functions
@@ -46,9 +46,9 @@
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 2
 // Baud rate
-#define BAUD = 115200;
+#define BAUD 115200
 // Tower number
-#define TOWER_NUMBER = 2324;
+#define TOWER_NUMBER 2324
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -92,25 +92,6 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 };
 
 
-/*! @brief Routine to use LPTMR.
- *
- *  @param pData is not used but is required by the OS to create a thread.
- */
-void LPTMRThread(void* data)
-{
-  for (;;)
-  {
-    OS_SemaphoreWait(LPTMRSem, 0);
-
-    // Toggle green LED
-    LEDs_Toggle(LED_GREEN);
-    // Signal the analog channels to take a sample
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-      (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
-  }
-}
-
-
 
 /*! @brief Initialises modules.
  *
@@ -123,16 +104,18 @@ static void InitModulesThread(void* pData)
   bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
   bool flashInitResult = Flash_Init();
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
+  bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
+
+  // Enable PIT - period in nanosecond is 1 / 50 / 16 * 1000000000
+  PIT_Set(125e4 , FALSE);
+  PIT_Enable(TRUE);
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
 
-  // Initialize the low power timer to tick every 1 ms
-  bool lptmrInitResult = LPTMR_Init(1);
-
   // Orange LED on if all init success
-  if (ledsInitResult && packetInitResult && flashInitResult && analogInitResult && lptmrInitResult)
+  if (ledsInitResult && packetInitResult && flashInitResult && analogInitResult && pitInitResults)
     LEDs_On(LED_BLUE);
 
   // Set tower number and tower mode
@@ -183,10 +166,7 @@ void PacketThread(void* data)
   for (;;)
   {
     if (Packet_Get())
-    {
-      LEDs_Toggle(LED_BLUE);
       Handle_Packet();
-    }
   }
 }
 
@@ -208,8 +188,6 @@ int main(void)
   for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
     error = OS_ThreadCreate(AnalogLoopbackThread, &AnalogThreadData[threadNb],
                             &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1], ANALOG_THREAD_PRIORITIES[threadNb]);
-  // Create LPTMR thread
-  error = OS_ThreadCreate(LPTMRThread, NULL, &LPTMRThreadStack[THREAD_STACK_SIZE-1], 3);
   // Create Packet handling threads
   error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE-1], 4);
   error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 5);
