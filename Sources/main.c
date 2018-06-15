@@ -42,24 +42,24 @@
 #include "Flash.h"
 
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
-#define THREAD_STACK_SIZE 100
-// Number of analog channels
-#define NB_ANALOG_CHANNELS 2
+#define THREAD_STACK_SIZE 1000
 // Baud rate
 #define BAUD 115200
 // Tower number
 #define TOWER_NUMBER 2324
+// Number of analog channels
+#define NB_ANALOG_CHANNELS 3
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
-OS_THREAD_STACK(LPTMRThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PITThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 
 // Thread priorities - 0 is highest priority
-const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {1, 2};
+const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 
 
 
@@ -88,6 +88,10 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 1
+  },
+  {
+    .semaphore = NULL,
+    .channelNb = 2
   }
 };
 
@@ -106,7 +110,7 @@ static void InitModulesThread(void* pData)
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
-  // Enable PIT - period in nanosecond is 1 / 50 / 16 * 1000000000
+  // Enable PIT - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
   PIT_Set(125e4 , FALSE);
   PIT_Enable(TRUE);
 
@@ -137,10 +141,27 @@ static void InitModulesThread(void* pData)
   OS_ThreadDelete(OS_PRIORITY_SELF);
 }
 
+
+/*! @brief Samples
+ *
+ */
+void PITThread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PITSem, 0);
+
+    // Signal the analog channels to take a sample
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+      (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+  }
+}
+
+
 /*! @brief Samples a value on an ADC channel and sends it to the corresponding DAC channel.
  *
  */
-void AnalogLoopbackThread(void* pData)
+void AnalogThread(void* pData)
 {
   // Make the code easier to read by giving a name to the typecast'ed pointer
   #define analogData ((TAnalogThreadData*)pData)
@@ -156,6 +177,7 @@ void AnalogLoopbackThread(void* pData)
     Analog_Put(analogData->channelNb, analogInputValue);
   }
 }
+
 
 /*! @brief Routine to receive and handle packets.
  *
@@ -184,14 +206,20 @@ int main(void)
 
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
-  // Create AnalogLoopback threads
+  // Create UARTReceive thread
+  error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE-1], 1);
+  // Create UARTTransmit thread
+  error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 2);
+  // Create Analog threads
   for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
-    error = OS_ThreadCreate(AnalogLoopbackThread, &AnalogThreadData[threadNb],
-                            &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1], ANALOG_THREAD_PRIORITIES[threadNb]);
-  // Create Packet handling threads
-  error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE-1], 4);
-  error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 5);
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 6);
+    error = OS_ThreadCreate(AnalogThread,
+                            &AnalogThreadData[threadNb],
+                            &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],
+                            ANALOG_THREAD_PRIORITIES[threadNb]);
+  // Create PIT thread
+  error = OS_ThreadCreate(PITThread, NULL, &PITThreadStack[THREAD_STACK_SIZE-1], 6);
+  // Create Packet thread
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 7);
 
   // Start multithreading - never returns!
   OS_Start();

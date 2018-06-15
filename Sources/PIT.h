@@ -16,7 +16,7 @@
 #include "PE_Types.h"
 #include "MK70F12.h"
 #include "OS.h"
-#include "LEDs.h"
+
 
 // Semaphore of PIT
 OS_ECB* PITSem;

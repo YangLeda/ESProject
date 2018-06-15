@@ -87,11 +87,7 @@ void __attribute__ ((interrupt)) PIT_ISR(void)
   // Clear PIT interrupt flag
   PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
 
-  // Toggle green LED
-  LEDs_Toggle(LED_GREEN);
-  // Signal the analog channels to take a sample
-  //for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    //(void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+  OS_SemaphoreSignal(PITSem);
 
   OS_ISRExit();
 }
