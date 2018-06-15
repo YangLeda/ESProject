@@ -113,7 +113,7 @@ static void InitModulesThread(void* pData)
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
   // Enable PIT - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-  PIT_Set(125e4 , FALSE);
+  PIT_Set(125e6 , FALSE);
   PIT_Enable(TRUE);
 
   // Generate the global analog semaphores
@@ -223,7 +223,7 @@ int main(void)
   // Create UARTTransmit thread
   error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 2);
   // Create Analog threads
-  for (uint8_t threadNb = 0; threadNb < 1; threadNb++)
+  for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
     error = OS_ThreadCreate(AnalogThread,
                             &AnalogThreadData[threadNb],
                             &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],
