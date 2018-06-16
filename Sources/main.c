@@ -55,7 +55,8 @@
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
-OS_THREAD_STACK(PITThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PIT0ThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PIT1ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
@@ -128,9 +129,12 @@ static void InitModulesThread(void* pData)
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
-  // Enable PIT - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-  PIT_Set(125e6 , FALSE);
-  PIT_Enable(TRUE);
+  // Enable PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
+  PIT_Set(0, 125e6 , FALSE);
+  PIT_Enable(0, TRUE);
+  // PIT1 - period in nanosecond is 500e6
+  PIT_Set(1, 500e6 , FALSE);
+  PIT_Enable(1, TRUE);
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
@@ -164,15 +168,29 @@ static void InitModulesThread(void* pData)
 /*! @brief Samples
  *
  */
-void PITThread(void* pData)
+void PIT0Thread(void* pData)
 {
   for (;;)
   {
-    (void)OS_SemaphoreWait(PITSem, 0);
+    (void)OS_SemaphoreWait(PIT0Sem, 0);
 
     // Signal the analog channels to take a sample
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+  }
+}
+
+
+/*! @brief Samples
+ *
+ */
+void PIT1Thread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PIT1Sem, 0);
+
+    LEDs_Toggle(LED_GREEN);
   }
 }
 
@@ -245,10 +263,12 @@ int main(void)
                             &AnalogThreadData[threadNb],
                             &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],
                             ANALOG_THREAD_PRIORITIES[threadNb]);
-  // Create PIT thread
-  error = OS_ThreadCreate(PITThread, NULL, &PITThreadStack[THREAD_STACK_SIZE-1], 6);
+  // Create PIT0 thread
+  error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
+  // Create PIT1 thread
+  error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 7);
   // Create Packet thread
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 7);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 8);
 
   // Start multithreading - never returns!
   OS_Start();

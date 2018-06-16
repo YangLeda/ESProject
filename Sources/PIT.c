@@ -23,22 +23,28 @@ static uint32_t PITModuleClk;
  */
 bool PIT_Init(const uint32_t moduleClk)
 {
-  PITSem = OS_SemaphoreCreate(0);
+  PIT0Sem = OS_SemaphoreCreate(0);
+  PIT1Sem = OS_SemaphoreCreate(0);
 
   PITModuleClk = moduleClk;
 
   // Enable clock register 6 for PIT
   SIM_SCGC6 |= SIM_SCGC6_PIT_MASK;
 
-  // Disable module before setup
-  PIT_MCR &= ~PIT_MCR_MDIS_MASK;
+  PIT_MCR |= PIT_MCR_MDIS_MASK;
 
   // Initialize NVICs for PIT
   NVICICPR2 = (1 << (68 % 32));
   NVICISER2 = (1 << (68 % 32));
 
+  NVICICPR2 = (1 << (69 % 32));
+  NVICISER2 = (1 << (69 % 32));
+
+  PIT_MCR &= ~PIT_MCR_MDIS_MASK;
+
   // Timer interrupt enable
   PIT_TCTRL0 |= PIT_TCTRL_TIE_MASK;
+  PIT_TCTRL1 |= PIT_TCTRL_TIE_MASK;
 
   return TRUE;
 }
@@ -50,28 +56,42 @@ bool PIT_Init(const uint32_t moduleClk)
  *                 FALSE if the PIT will use the new value after a trigger event.
  *  @note The function will enable the timer and interrupts for the PIT.
  */
-void PIT_Set(const uint32_t period, const bool restart)
+void PIT_Set(uint8_t ch, const uint32_t period, const bool restart)
 {
   uint32_t trigger = (PITModuleClk / (1e9 / period)) - 1;
-  PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
 
   if (restart)
-  {
-    PIT_Enable(FALSE);
-    PIT_Enable(TRUE);
-  }
+    PIT_Enable(ch, FALSE);
+
+  if (ch == 0)
+    PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
+  else if (ch == 1)
+    PIT_LDVAL1 = PIT_LDVAL_TSV(trigger);
+
+  if (restart)
+    PIT_Enable(ch, TRUE);
 }
 
 /*! @brief Enables or disables the PIT.
  *
  *  @param enable - TRUE if the PIT is to be enabled, FALSE if the PIT is to be disabled.
  */
-void PIT_Enable(const bool enable)
+void PIT_Enable(uint8_t ch, const bool enable)
 {
-  if (enable)
-    PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
-  else
-    PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
+  if (ch == 0)
+  {
+    if (enable)
+      PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
+    else
+      PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
+  }
+  else if (ch == 1)
+  {
+    if (enable)
+      PIT_TCTRL1 |= PIT_TCTRL_TEN_MASK;
+    else
+      PIT_TCTRL1 &= ~PIT_TCTRL_TEN_MASK;
+  }
 }
 
 /*! @brief Interrupt service routine for the PIT.
@@ -84,10 +104,17 @@ void __attribute__ ((interrupt)) PIT_ISR(void)
 {
   OS_ISREnter();
 
-  // Clear PIT interrupt flag
-  PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
+  if (PIT_TFLG0 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT0Sem);
+  }
 
-  OS_SemaphoreSignal(PITSem);
+  if (PIT_TFLG1 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG1 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT1Sem);
+  }
 
   OS_ISRExit();
 }

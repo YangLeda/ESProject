@@ -18,8 +18,9 @@
 #include "OS.h"
 
 
-// Semaphore of PIT
-OS_ECB* PITSem;
+// Semaphores of PIT
+OS_ECB* PIT0Sem;
+OS_ECB* PIT1Sem;
 
 /*! @brief Sets up the PIT before first use.
  *
@@ -39,13 +40,13 @@ bool PIT_Init(const uint32_t moduleClk);
  *                 FALSE if the PIT will use the new value after a trigger event.
  *  @note The function will enable the timer and interrupts for the PIT.
  */
-void PIT_Set(const uint32_t period, const bool restart);
+void PIT_Set(uint8_t ch, const uint32_t period, const bool restart);
 
 /*! @brief Enables or disables the PIT.
  *
  *  @param enable - TRUE if the PIT is to be enabled, FALSE if the PIT is to be disabled.
  */
-void PIT_Enable(const bool enable);
+void PIT_Enable(uint8_t ch, const bool enable);
 
 /*! @brief Interrupt service routine for the PIT.
  *
