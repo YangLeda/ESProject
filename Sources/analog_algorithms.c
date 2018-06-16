@@ -13,7 +13,7 @@
 // Newton's method
 // Sample number is 16
 // " / 16" == " >> 4", " / 2" == " >> 1"
-uint16_t Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage)
+void Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage)
 {
   // Subtract one sample
   *sum_rms_squares -= *sum_rms_squares >> 4;
@@ -27,5 +27,4 @@ uint16_t Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVol
   // New rms
   *rms = (*rms + (*sum_rms_squares >> 4) / *rms) >> 1;
 
-  
 }

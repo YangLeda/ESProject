@@ -30,7 +30,7 @@
  *  @return bool - TRUE if the PIT was successfully initialized.
  *  @note Assumes that moduleClk has a period which can be expressed as an integral number of nanoseconds.
  */
-uint16_t Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage);
+void Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage);
 
 
 

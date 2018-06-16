@@ -50,7 +50,11 @@
 // Tower number
 #define TOWER_NUMBER 2324
 
+#define ANALOG_RAISE_CHANNEL 0
+#define ANALOG_LOWER_CHANNEL 1
+#define ANALOG_ALARM_CHANNEL 2
 
+#define ANALOG_5V 16384
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -78,6 +82,9 @@ typedef struct AnalogThreadData
   uint8_t channelNb;
   uint16_t rms;
   uint32_t sum_rms_squares;
+  bool alarming;
+  bool tapping;
+  uint16_t time_remaining;
 } TAnalogThreadData;
 
 /*! @brief Analog thread configuration data
@@ -89,19 +96,28 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .semaphore = NULL,
     .channelNb = 0,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
+    .alarming = FALSE,
+    .tapping = FALSE,
+    .time_remaining = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 1,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
+    .alarming = FALSE,
+    .tapping = FALSE,
+    .time_remaining = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 2,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
+    .alarming = FALSE,
+    .tapping = FALSE,
+    .time_remaining = 0
   }
 };
 
@@ -120,10 +136,10 @@ static void InitModulesThread(void* pData)
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
   // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-  PIT_Set(0, 125e6 , FALSE);
+  PIT_Set(0, 125e4 , FALSE);
   PIT_Enable(0, TRUE);
-  // PIT1 - period in nanosecond is 500e6
-  PIT_Set(1, 500e6 , FALSE);
+  // PIT1 - period 50ms in nanosecond is 500e6
+  PIT_Set(1, 5e7 , FALSE);
   PIT_Enable(1, TRUE);
 
   // Generate the global analog semaphores
@@ -164,9 +180,21 @@ void PIT0Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT0Sem, 0);
 
-    // Signal the analog channels to take a sample
+    uint8_t alarmingChannelNumber = 0;
+
+    // Signal each analog channel to take a sample
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    {
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+      if (AnalogThreadData[analogNb].alarming == TRUE)
+        alarmingChannelNumber ++;
+    }
+
+    if (alarmingChannelNumber > 0)
+      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    else
+      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+
   }
 }
 
@@ -179,8 +207,6 @@ void PIT1Thread(void* pData)
   for (;;)
   {
     (void)OS_SemaphoreWait(PIT1Sem, 0);
-
-    LEDs_Toggle(LED_GREEN);
   }
 }
 
@@ -209,8 +235,30 @@ void AnalogThread(void* pData)
     // Calculate RMS Voltage
     Algorithm_RMS(&(analogData->rms), &(analogData->sum_rms_squares), realVoltage);
 
+    if (analogData->rms < 2000)
+    {
+      analogData->alarming == TRUE;
+      if (analogData->alarming)
+        LEDs_On(LED_GREEN);
+      //Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
+      //Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    }
+    else if (analogData->rms > 3000)
+    {
+      analogData->alarming == TRUE;
+      //LEDs_On(LED_GREEN);
+      //Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
+      //Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    }
+    else if (analogData->rms >= 2000 && analogData->rms <= 3000 )
+    {
+      analogData->alarming == FALSE;
+      //LEDs_Off(LED_GREEN);
+      //Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+    }
+
     // test put
-    Packet_Put(0xff, analogData->channelNb, analogData->rms >> 8, analogData->rms);
+    //Packet_Put(0xff, analogData->channelNb, analogData->rms >> 8, analogData->rms);
 
   }
 }
