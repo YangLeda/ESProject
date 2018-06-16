@@ -193,7 +193,7 @@ void PIT0Thread(void* pData)
 /*! @brief Check status of each channel and handle analog output
  *
  */
-// Status bools are writen in other threads and read here.
+// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
 void PIT1Thread(void* pData)
 {
   for (;;)
@@ -203,12 +203,14 @@ void PIT1Thread(void* pData)
     uint8_t alarmingChannelNumber = 0;
 
     // Check each analog channel status
+    EnterCritical();
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
       if (AnalogThreadData[analogNb].alarming == TRUE)
         alarmingChannelNumber ++;
     }
-
+    ExitCritical();
+    
     // If one or more channel is alarming
     if (alarmingChannelNumber > 0)
     {
@@ -251,15 +253,21 @@ void AnalogThread(void* pData)
 
     if (analogData->rms < 2000)
     {
+      EnterCritical();
       analogData->alarming = TRUE;
+      ExitCritical();
     }
     else if (analogData->rms > 3000)
     {
+      EnterCritical();
       analogData->alarming = TRUE;
+      ExitCritical();
     }
     else if (analogData->rms >= 2000 && analogData->rms <= 3000 )
     {
+      EnterCritical();
       analogData->alarming = FALSE;
+      ExitCritical();
     }
 
     // test put
