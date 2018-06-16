@@ -17,6 +17,18 @@
 #include "MK70F12.h"
 #include "OS.h"
 
+// Number of analog channels
+#define NB_ANALOG_CHANNELS 3
+
+
+// Struct to store data of an analog channel
+typedef struct
+{
+  uint16_t rms;
+  uint32_t sum_rms_squares;
+} TAnalogChannelData;
+
+extern TAnalogChannelData AnalogChannelData[NB_ANALOG_CHANNELS];
 
 /*! @brief Sets up the PIT before first use.
  *
@@ -27,7 +39,7 @@
  *  @return bool - TRUE if the PIT was successfully initialized.
  *  @note Assumes that moduleClk has a period which can be expressed as an integral number of nanoseconds.
  */
-uint16_t Algorithm_RMS(int16_t sample);
+void Algorithm_RMS(uint8_t channelNb, int16_t realVoltage);
 
 
 

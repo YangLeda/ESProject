@@ -41,7 +41,7 @@
 // Flash functions
 #include "Flash.h"
 // Algorithms
-#include "algorithms.h"
+#include "analog_algorithms.h"
 
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
 #define THREAD_STACK_SIZE 1000
@@ -49,8 +49,7 @@
 #define BAUD 115200
 // Tower number
 #define TOWER_NUMBER 2324
-// Number of analog channels
-#define NB_ANALOG_CHANNELS 3
+
 
 
 // Thread stacks
@@ -94,6 +93,23 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 2
+  }
+};
+
+// Struct array to store data of analog channels
+TAnalogChannelData AnalogChannelData[NB_ANALOG_CHANNELS] =
+{
+  {
+    .rms = 2.5,
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
+  },
+  {
+    .rms = 2.5,
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
+  },
+  {
+    .rms = 2.5,
+    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
   }
 };
 
@@ -173,7 +189,6 @@ void AnalogThread(void* pData)
   {
     int16_t analogInputValue;
     int16_t realVoltage;
-    uint16_t rms;
 
     (void)OS_SemaphoreWait(analogData->semaphore, 0);
 
@@ -183,9 +198,11 @@ void AnalogThread(void* pData)
     // Real voltage = analogInputValue / 3276.7
     realVoltage = analogInputValue * 305 / 1e3;
 
-    rms = Algorithm_RMS(realVoltage);
+    // Calculate RMS Voltage
+    Algorithm_RMS(analogData->channelNb, realVoltage);
 
-    Packet_Put(0xff, analogData->channelNb, rms >> 8, rms);
+    // test put
+    Packet_Put(0xff, analogData->channelNb, AnalogChannelData[analogData->channelNb].rms >> 8, AnalogChannelData[analogData->channelNb].rms);
 
   }
 }
