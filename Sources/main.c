@@ -180,17 +180,36 @@ void PIT0Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT0Sem, 0);
 
-    uint8_t alarmingChannelNumber = 0;
-
     // Signal each analog channel to take a sample
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+    }
+    
+  }
+}
+
+
+/*! @brief Check status of each channel and handle analog output
+ *
+ */
+// Status bools are writen in other threads and read here.
+void PIT1Thread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PIT1Sem, 0);
+    
+    uint8_t alarmingChannelNumber = 0;
+
+    // Check each analog channel status
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    {
       if (AnalogThreadData[analogNb].alarming == TRUE)
         alarmingChannelNumber ++;
     }
 
-    // Check if any channel is alarming
+    // If one or more channel is alarming
     if (alarmingChannelNumber > 0)
     {
       LEDs_On(LED_GREEN);
@@ -201,19 +220,7 @@ void PIT0Thread(void* pData)
       LEDs_Off(LED_GREEN);
       Analog_Put(ANALOG_ALARM_CHANNEL, 0);
     }
-
-  }
-}
-
-
-/*! @brief Alarm Timing
- *
- */
-void PIT1Thread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(PIT1Sem, 0);
+    
   }
 }
 
