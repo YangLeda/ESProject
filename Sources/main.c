@@ -190,10 +190,17 @@ void PIT0Thread(void* pData)
         alarmingChannelNumber ++;
     }
 
+    // Check if any channel is alarming
     if (alarmingChannelNumber > 0)
+    {
+      LEDs_On(LED_GREEN);
       Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    }
     else
+    {
+      LEDs_Off(LED_GREEN);
       Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+    }
 
   }
 }
@@ -237,24 +244,15 @@ void AnalogThread(void* pData)
 
     if (analogData->rms < 2000)
     {
-      analogData->alarming == TRUE;
-      if (analogData->alarming)
-        LEDs_On(LED_GREEN);
-      //Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
-      //Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+      analogData->alarming = TRUE;
     }
     else if (analogData->rms > 3000)
     {
-      analogData->alarming == TRUE;
-      //LEDs_On(LED_GREEN);
-      //Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
-      //Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+      analogData->alarming = TRUE;
     }
     else if (analogData->rms >= 2000 && analogData->rms <= 3000 )
     {
-      analogData->alarming == FALSE;
-      //LEDs_Off(LED_GREEN);
-      //Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+      analogData->alarming = FALSE;
     }
 
     // test put
