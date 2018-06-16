@@ -13,18 +13,19 @@
 // Newton's method
 // Sample number is 16
 // " / 16" == " >> 4", " / 2" == " >> 1"
-void Algorithm_RMS(uint8_t channelNb, int16_t realVoltage)
+uint16_t Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage)
 {
   // Subtract one sample
-  AnalogChannelData[channelNb].sum_rms_squares -= AnalogChannelData[channelNb].sum_rms_squares >> 4;
+  *sum_rms_squares -= *sum_rms_squares >> 4;
   // Add new RMS square
-  AnalogChannelData[channelNb].sum_rms_squares += (uint32_t) realVoltage * realVoltage;
+  *sum_rms_squares += (uint32_t) realVoltage * realVoltage;
   
   // Avoid divide by 0
-  if (AnalogChannelData[channelNb].rms == 0)
-    AnalogChannelData[channelNb].rms = 1;
+  if (*rms == 0)
+    *rms = 1;
   
   // New rms
-  AnalogChannelData[channelNb].rms = (AnalogChannelData[channelNb].rms + (AnalogChannelData[channelNb].sum_rms_squares >> 4) / AnalogChannelData[channelNb].rms) >> 1;
+  *rms = (*rms + (*sum_rms_squares >> 4) / *rms) >> 1;
+
   
 }

@@ -21,15 +21,6 @@
 #define NB_ANALOG_CHANNELS 3
 
 
-// Struct to store data of an analog channel
-typedef struct
-{
-  uint16_t rms;
-  uint32_t sum_rms_squares;
-} TAnalogChannelData;
-
-extern TAnalogChannelData AnalogChannelData[NB_ANALOG_CHANNELS];
-
 /*! @brief Sets up the PIT before first use.
  *
  *  Enables the PIT and freezes the timer when debugging.
@@ -39,7 +30,7 @@ extern TAnalogChannelData AnalogChannelData[NB_ANALOG_CHANNELS];
  *  @return bool - TRUE if the PIT was successfully initialized.
  *  @note Assumes that moduleClk has a period which can be expressed as an integral number of nanoseconds.
  */
-void Algorithm_RMS(uint8_t channelNb, int16_t realVoltage);
+uint16_t Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage);
 
 
 

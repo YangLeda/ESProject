@@ -76,6 +76,8 @@ typedef struct AnalogThreadData
 {
   OS_ECB* semaphore;
   uint8_t channelNb;
+  uint16_t rms;
+  uint32_t sum_rms_squares;
 } TAnalogThreadData;
 
 /*! @brief Analog thread configuration data
@@ -85,35 +87,23 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 {
   {
     .semaphore = NULL,
-    .channelNb = 0
-  },
-  {
-    .semaphore = NULL,
-    .channelNb = 1
-  },
-  {
-    .semaphore = NULL,
-    .channelNb = 2
-  }
-};
-
-// Struct array to store data of analog channels
-TAnalogChannelData AnalogChannelData[NB_ANALOG_CHANNELS] =
-{
-  {
+    .channelNb = 0,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
   },
   {
+    .semaphore = NULL,
+    .channelNb = 1,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
   },
   {
+    .semaphore = NULL,
+    .channelNb = 2,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16
   }
 };
-
 
 
 /*! @brief Initialises modules.
@@ -129,7 +119,7 @@ static void InitModulesThread(void* pData)
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
-  // Enable PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
+  // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
   PIT_Set(0, 125e6 , FALSE);
   PIT_Enable(0, TRUE);
   // PIT1 - period in nanosecond is 500e6
@@ -165,7 +155,7 @@ static void InitModulesThread(void* pData)
 }
 
 
-/*! @brief Samples
+/*! @brief 16 samples per cycle
  *
  */
 void PIT0Thread(void* pData)
@@ -181,7 +171,7 @@ void PIT0Thread(void* pData)
 }
 
 
-/*! @brief Samples
+/*! @brief Alarm Timing
  *
  */
 void PIT1Thread(void* pData)
@@ -217,10 +207,10 @@ void AnalogThread(void* pData)
     realVoltage = analogInputValue * 305 / 1e3;
 
     // Calculate RMS Voltage
-    Algorithm_RMS(analogData->channelNb, realVoltage);
+    Algorithm_RMS(&(analogData->rms), &(analogData->sum_rms_squares), realVoltage);
 
     // test put
-    Packet_Put(0xff, analogData->channelNb, AnalogChannelData[analogData->channelNb].rms >> 8, AnalogChannelData[analogData->channelNb].rms);
+    Packet_Put(0xff, analogData->channelNb, analogData->rms >> 8, analogData->rms);
 
   }
 }
