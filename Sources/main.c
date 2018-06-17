@@ -191,24 +191,24 @@ void PIT0Thread(void* pData)
     // If one or more channel is alarming
     if (hasAlarming)
     {
-      LEDs_On(LED_YELLOW);
+      LEDs_On(LED_BLUE);
       Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
     }
     else
     {
-      LEDs_Off(LED_YELLOW);
+      LEDs_Off(LED_BLUE);
       Analog_Put(ANALOG_ALARM_CHANNEL, 0);
     }
 
     // If one or more channel is raise tapping
     if (hasRaiseTapping)
     {
-      LEDs_On(LED_BLUE);
+      LEDs_On(LED_YELLOW);
       Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
     }
     else
     {
-      LEDs_Off(LED_BLUE);
+      LEDs_Off(LED_YELLOW);
       Analog_Put(ANALOG_RAISE_CHANNEL, 0);
     }
 
