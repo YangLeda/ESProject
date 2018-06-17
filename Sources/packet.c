@@ -101,9 +101,7 @@ static bool Handle_Startup_Packet(void)
   if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0 && Packet_Parameter3 == 0)
   {
     Packet_Put(0x04, 0, 0, 0); // Special - Startup
-    Packet_Put(0x09, 'v', 1, 0); // Special - Version number
-    Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi); // Tower Number
-    Packet_Put(0x0D, 1, NvTowerMd->s.Lo, NvTowerMd->s.Hi); // Tower Mode
+    Packet_Put(0x09, 'v', 6, 0); // Special - Version number
     return TRUE;
   }
   else
@@ -123,20 +121,7 @@ static bool Handle_Version_Packet(void)
     return FALSE;
 }
 
-/*! @brief Handle the Tower number command.
- *
- *  @return bool - TRUE if handle successful
- *  	           FALSE if handle failed
- */
-static bool Handle_Number_Packet(void)
-{
-  if (Packet_Parameter1 == 1 && Packet_Parameter2 == 0 && Packet_Parameter3 == 0) // Get
-    return Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi);
-  else if (Packet_Parameter1 == 2) // Set
-    return Flash_Write16((uint16*) NvTowerNb, Packet_Parameter23);
-  else
-    return FALSE;
-}
+
 
 /*! @brief Handle the Flash - Read byte command.
  *
@@ -183,9 +168,6 @@ void Handle_Packet(void)
       break;
     case 0x09:
       successFlag = Handle_Version_Packet();
-      break;
-    case 0x0B:
-      successFlag = Handle_Number_Packet();
       break;
     case 0x08:
       successFlag = Handle_FlashRead_Packet();

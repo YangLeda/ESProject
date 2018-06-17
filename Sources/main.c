@@ -72,9 +72,9 @@ OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 
 
-// Non-volatile variables for tower number and tower mode
-uint16union_t* volatile NvTowerNb;
-uint16union_t* volatile NvTowerMd;
+// Non-volatile variables for ...
+uint16union_t* volatile NumOfRaise;
+uint16union_t* volatile NumOfLower;
 
 
 /*! @brief Data structure used to pass Analog configuration to a user thread
@@ -151,19 +151,16 @@ static void InitModulesThread(void* pData)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
 
   // Set tower number and tower mode
-  Flash_AllocateVar((volatile void**) &NvTowerNb, sizeof(*NvTowerNb));
-  Flash_AllocateVar((volatile void**) &NvTowerMd, sizeof(*NvTowerMd));
-  if (NvTowerNb->l == 0xFFFF || NvTowerMd->l == 0xFFFF) // Not set before
-  {
-    Flash_Write16((uint16*) NvTowerNb, TOWER_NUMBER);
-    Flash_Write16((uint16*) NvTowerMd, 0x01);
-  }
+  Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
+  Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
+  // init to 0
+  Flash_Write16((uint16*) NumOfRaise, 0);
+  Flash_Write16((uint16*) NumOfLower, 0);
+
 
   // Send startup packets
   Packet_Put(0x04, 0, 0, 0); // Special - Startup
-  Packet_Put(0x09, 'v', 1, 0); // Special - Version number
-  Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi); // Tower Number
-  Packet_Put(0x0D, 1, NvTowerMd->s.Lo, NvTowerMd->s.Hi); // Tower Mode
+  Packet_Put(0x09, 'v', 6, 0); // Special - Version number
 
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
@@ -253,12 +250,23 @@ void PIT1Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT1Sem, 0);
 
-    Packet_Put(0xff, 1, 0, 0);
-
     PIT_Enable(1, FALSE);
 
     AnalogThreadData[0].tapping_status_code = AnalogThreadData[0].voltage_status_code;
 
+    // save to flash
+    if (AnalogThreadData[0].tapping_status_code == 1)
+    {
+      // Lower
+      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+    }
+    else if (AnalogThreadData[0].tapping_status_code == 2)
+    {
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+    }
+
+    Packet_Put(0xff, 0, NumOfLower->s.Lo, NumOfLower->s.Hi);
+    Packet_Put(0xff, 0, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
 
   }
 }
@@ -273,11 +281,25 @@ void PIT2Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT2Sem, 0);
 
-    Packet_Put(0xff, 2, 0, 0);
 
     PIT_Enable(2, FALSE);
 
     AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
+
+    // save to flash
+    if (AnalogThreadData[0].tapping_status_code == 1)
+    {
+      // Lower
+      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+    }
+    else if (AnalogThreadData[0].tapping_status_code == 2)
+    {
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+    }
+
+    Packet_Put(0xff, 1, NumOfLower->s.Lo, NumOfLower->s.Hi);
+    Packet_Put(0xff, 1, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
+
   }
 }
 
@@ -297,6 +319,21 @@ void PIT3Thread(void* pData)
     PIT_Enable(3, FALSE);
 
     AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
+
+    // save to flash
+    if (AnalogThreadData[0].tapping_status_code == 1)
+    {
+      // Lower
+      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+    }
+    else if (AnalogThreadData[0].tapping_status_code == 2)
+    {
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+    }
+
+    Packet_Put(0xff, 2, NumOfLower->s.Lo, NumOfLower->s.Hi);
+    Packet_Put(0xff, 2, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
+
   }
 }
 
