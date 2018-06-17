@@ -115,20 +115,17 @@ static bool Handle_Timing_Mode_Packet(void)
 {
   if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0x00) // Get timing mode
   {
-    if (InverseTimingMode == FALSE)
-      Packet_Put(0x10, 1, 0, 0);
-    else
-      Packet_Put(0x10, 2, 0, 0);
+    Packet_Put(0x10, *TimingMode, 0, 0);
     return TRUE;
   }
   else if (Packet_Parameter1 == 1 && Packet_Parameter2 == 0x00) // Set to definite mode
   {
-    InverseTimingMode = FALSE;
+    Flash_Write8(TimingMode, 1);
     return TRUE;
   }
   else if (Packet_Parameter1 == 2 && Packet_Parameter2 == 0x00) // Set to inverse mode
   {
-    InverseTimingMode = TRUE;
+    Flash_Write8(TimingMode, 2);
     return TRUE;
   }
   return FALSE;

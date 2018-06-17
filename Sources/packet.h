@@ -70,8 +70,7 @@ extern const uint8_t PACKET_ACK_MASK;
 
 extern uint16union_t* volatile NumOfRaise;
 extern uint16union_t* volatile NumOfLower;
-
-extern bool InverseTimingMode;
+extern uint8_t* volatile TimingMode;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 

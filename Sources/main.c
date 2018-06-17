@@ -72,13 +72,12 @@ OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 
 
-// Non-volatile variables for numbers of raise/lower events
 // Flash WritePhrase is in critical section
+// Non-volatile variables for numbers of raise/lower events
 uint16union_t* volatile NumOfRaise;
 uint16union_t* volatile NumOfLower;
-
-// True - inverse timing mode; False - definite timing mode
-bool InverseTimingMode = FALSE;
+// 1 - definite timing mode; 2 - inverse timing mode
+uint8_t* volatile TimingMode;
 
 
 /*! @brief Analog thread configuration data
@@ -142,8 +141,10 @@ static void InitModulesThread(void* pData)
   // Initialize number of raise/lower events to 0
   Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
   Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
+  Flash_AllocateVar((volatile void**) &TimingMode, sizeof(*TimingMode));
   Flash_Write16((uint16*) NumOfRaise, 0);
   Flash_Write16((uint16*) NumOfLower, 0);
+  Flash_Write8(TimingMode, 1);
 
   // Send startup packets
   Packet_Put(0x04, 0, 0, 0);
