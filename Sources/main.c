@@ -55,12 +55,15 @@
 #define ANALOG_ALARM_CHANNEL 2
 
 #define ANALOG_5V 16384
+#define TIME_DEFINITE 1e9
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
 OS_THREAD_STACK(PIT0ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PIT1ThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PIT2ThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(PIT3ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
@@ -73,6 +76,7 @@ const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 uint16union_t* volatile NvTowerNb;
 uint16union_t* volatile NvTowerMd;
 
+
 /*! @brief Data structure used to pass Analog configuration to a user thread
  *
  */
@@ -82,9 +86,9 @@ typedef struct AnalogThreadData
   uint8_t channelNb;
   uint16_t rms;
   uint32_t sum_rms_squares;
-  bool alarming;
-  bool tapping;
-  uint16_t time_remaining;
+  uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
+  uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
+  uint16_t timing;
 } TAnalogThreadData;
 
 /*! @brief Analog thread configuration data
@@ -97,27 +101,27 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .channelNb = 0,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
-    .alarming = FALSE,
-    .tapping = FALSE,
-    .time_remaining = 0
+    .voltage_status_code = 0,
+    .tapping_status_code = 0,
+    .timing = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 1,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
-    .alarming = FALSE,
-    .tapping = FALSE,
-    .time_remaining = 0
+    .voltage_status_code = 0,
+    .tapping_status_code = 0,
+    .timing = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 2,
     .rms = 2.5,
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
-    .alarming = FALSE,
-    .tapping = FALSE,
-    .time_remaining = 0
+    .voltage_status_code = 0,
+    .tapping_status_code = 0,
+    .timing = 0
   }
 };
 
@@ -128,6 +132,8 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 static void InitModulesThread(void* pData)
 {
 
+
+
   // Initialize modules
   bool ledsInitResult = LEDs_Init();
   bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
@@ -136,8 +142,9 @@ static void InitModulesThread(void* pData)
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
 
   // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-  PIT_Set(0, 125e4 , FALSE);
+  PIT_Set(0, 125e4, FALSE);
   PIT_Enable(0, TRUE);
+
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
@@ -158,13 +165,12 @@ static void InitModulesThread(void* pData)
   Packet_Put(0x0B, 1, NvTowerNb->s.Lo, NvTowerNb->s.Hi); // Tower Number
   Packet_Put(0x0D, 1, NvTowerMd->s.Lo, NvTowerMd->s.Hi); // Tower Mode
 
-
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
 }
 
 
-/*! @brief 16 samples per cycle
+/*! @brief 16 samples per cycle & control 3 outputs
  *
  */
 void PIT0Thread(void* pData)
@@ -179,11 +185,65 @@ void PIT0Thread(void* pData)
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
     }
     
+    
+    bool hasAlarming = FALSE;
+    bool hasRaiseTapping = FALSE;
+    bool hasLowerTapping = FALSE;
+
+    // Check each analog channel status
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    {
+      if (AnalogThreadData[analogNb].voltage_status_code > 0)
+        hasAlarming = TRUE;
+
+      if (AnalogThreadData[analogNb].tapping_status_code == 1)
+        hasLowerTapping = TRUE;
+      else if (AnalogThreadData[analogNb].tapping_status_code == 2)
+        hasRaiseTapping = TRUE;
+    }
+
+
+    // If one or more channel is alarming
+    if (hasAlarming)
+    {
+      LEDs_On(LED_YELLOW);
+      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_YELLOW);
+      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+    }
+
+    // If one or more channel is raise tapping
+    if (hasRaiseTapping)
+    {
+      LEDs_On(LED_BLUE);
+      Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_BLUE);
+      Analog_Put(ANALOG_RAISE_CHANNEL, 0);
+    }
+
+    // If one or more channel is lower tapping
+    if (hasLowerTapping)
+    {
+      LEDs_On(LED_GREEN);
+      Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_GREEN);
+      Analog_Put(ANALOG_LOWER_CHANNEL, 0);
+    }
+    
   }
 }
 
 
-/*! @brief Check status of each channel and handle analog output
+/*! @brief channel 0 time out
  *
  */
 // Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
@@ -192,35 +252,56 @@ void PIT1Thread(void* pData)
   for (;;)
   {
     (void)OS_SemaphoreWait(PIT1Sem, 0);
-    
-    uint8_t alarmingChannelNumber = 0;
 
-    // Check each analog channel status
-    EnterCritical();
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    {
-      if (AnalogThreadData[analogNb].alarming == TRUE)
-        alarmingChannelNumber ++;
-    }
-    ExitCritical();
-    
-    // If one or more channel is alarming
-    if (alarmingChannelNumber > 0)
-    {
-      LEDs_On(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
-    }
-    
+    Packet_Put(0xff, 1, 0, 0);
+
+    PIT_Enable(1, FALSE);
+
+    AnalogThreadData[0].tapping_status_code = AnalogThreadData[0].voltage_status_code;
+
+
+  }
+}
+
+/*! @brief channel 0 time out
+ *
+ */
+// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
+void PIT2Thread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PIT2Sem, 0);
+
+    Packet_Put(0xff, 2, 0, 0);
+
+    PIT_Enable(2, FALSE);
+
+    AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
   }
 }
 
 
-/*! @brief Samples a value on an ADC channel and sends it to the corresponding DAC channel.
+/*! @brief channel 0 time out
+ *
+ */
+// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
+void PIT3Thread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PIT3Sem, 0);
+
+    Packet_Put(0xff, 3, 0, 0);
+
+    PIT_Enable(3, FALSE);
+
+    AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
+  }
+}
+
+
+/*! @brief Samples a value on an ADC channel & start timer
  *
  */
 void AnalogThread(void* pData)
@@ -246,25 +327,35 @@ void AnalogThread(void* pData)
 
     if (analogData->rms < 2000)
     {
-      EnterCritical();
-      analogData->alarming = TRUE;
-      ExitCritical();
+      // PIT1 - period 3s
+      if (analogData->timing == 0)
+      {
+        PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
+        analogData->timing = 1;
+      }
+
+      analogData->voltage_status_code = 2;
+
     }
     else if (analogData->rms > 3000)
     {
-      // PIT1 - period 50ms in nanosecond is 500e6
-      PIT_Set(1, 5e7 , FALSE);
-      PIT_Enable(1, TRUE);
+      // PIT - period 3s
+      if (analogData->timing == 0)
+      {
+        PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
+        analogData->timing = 1;
+      }
 
-      EnterCritical();
-      analogData->alarming = TRUE;
-      ExitCritical();
+      analogData->voltage_status_code = 1;
     }
-    else if (analogData->rms >= 2000 && analogData->rms <= 3000 )
+    else if (analogData->rms >= 2000 && analogData->rms <= 3000)
     {
-      EnterCritical();
-      analogData->alarming = FALSE;
-      ExitCritical();
+      analogData->voltage_status_code = 0;
+      analogData->tapping_status_code = 0;
+
+      // PIT - stop timing
+      PIT_Enable(analogData->channelNb + 1, FALSE);
+      analogData->timing = 0;
     }
 
     // test put
@@ -297,7 +388,7 @@ int main(void)
   PE_low_level_init();
 
   // Initialize the RTOS
-  OS_Init(CPU_CORE_CLK_HZ, FALSE);
+  OS_Init(CPU_CORE_CLK_HZ, TRUE);
 
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
@@ -315,8 +406,12 @@ int main(void)
   error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
   // Create PIT1 thread
   error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 7);
+  // Create PIT0 thread
+  error = OS_ThreadCreate(PIT2Thread, NULL, &PIT2ThreadStack[THREAD_STACK_SIZE-1], 8);
+  // Create PIT1 thread
+  error = OS_ThreadCreate(PIT3Thread, NULL, &PIT3ThreadStack[THREAD_STACK_SIZE-1], 9);
   // Create Packet thread
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 8);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 10);
 
   // Start multithreading - never returns!
   OS_Start();

@@ -21,6 +21,8 @@
 // Semaphores of PIT
 OS_ECB* PIT0Sem;
 OS_ECB* PIT1Sem;
+OS_ECB* PIT2Sem;
+OS_ECB* PIT3Sem;
 
 /*! @brief Sets up the PIT before first use.
  *
@@ -55,5 +57,6 @@ void PIT_Enable(uint8_t ch, const bool enable);
  *  @note Assumes the PIT has been initialized.
  */
 void __attribute__ ((interrupt)) PIT_ISR(void);
+
 
 #endif

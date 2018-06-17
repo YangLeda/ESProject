@@ -12,6 +12,7 @@
 
 static uint32_t PITModuleClk;
 
+
 /*! @brief Sets up the PIT before first use.
  *
  *  Enables the PIT and freezes the timer when debugging.
@@ -25,6 +26,8 @@ bool PIT_Init(const uint32_t moduleClk)
 {
   PIT0Sem = OS_SemaphoreCreate(0);
   PIT1Sem = OS_SemaphoreCreate(0);
+  PIT2Sem = OS_SemaphoreCreate(0);
+  PIT3Sem = OS_SemaphoreCreate(0);
 
   PITModuleClk = moduleClk;
 
@@ -39,6 +42,12 @@ bool PIT_Init(const uint32_t moduleClk)
 
   NVICICPR2 = (1 << (69 % 32));
   NVICISER2 = (1 << (69 % 32));
+
+  NVICICPR2 = (1 << (70 % 32));
+  NVICISER2 = (1 << (70 % 32));
+
+  NVICICPR2 = (1 << (71 % 32));
+  NVICISER2 = (1 << (71 % 32));
 
   PIT_MCR &= ~PIT_MCR_MDIS_MASK;
 
@@ -63,10 +72,21 @@ void PIT_Set(uint8_t ch, const uint32_t period, const bool restart)
   if (restart)
     PIT_Enable(ch, FALSE);
 
-  if (ch == 0)
-    PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
-  else if (ch == 1)
-    PIT_LDVAL1 = PIT_LDVAL_TSV(trigger);
+  switch (ch)
+  {
+    case 0:
+      PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
+      break;
+    case 1:
+      PIT_LDVAL1 = PIT_LDVAL_TSV(trigger);
+      break;
+    case 2:
+      PIT_LDVAL2 = PIT_LDVAL_TSV(trigger);
+      break;
+    case 3:
+      PIT_LDVAL3 = PIT_LDVAL_TSV(trigger);
+      break;
+  }
 
   if (restart)
     PIT_Enable(ch, TRUE);
@@ -78,19 +98,32 @@ void PIT_Set(uint8_t ch, const uint32_t period, const bool restart)
  */
 void PIT_Enable(uint8_t ch, const bool enable)
 {
-  if (ch == 0)
+  switch (ch)
   {
-    if (enable)
-      PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
-    else
-      PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
-  }
-  else if (ch == 1)
-  {
-    if (enable)
-      PIT_TCTRL1 |= PIT_TCTRL_TEN_MASK;
-    else
-      PIT_TCTRL1 &= ~PIT_TCTRL_TEN_MASK;
+    case 0:
+      if (enable)
+        PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
+      else
+        PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
+      break;
+    case 1:
+      if (enable)
+        PIT_TCTRL1 |= PIT_TCTRL_TEN_MASK;
+      else
+        PIT_TCTRL1 &= ~PIT_TCTRL_TEN_MASK;
+      break;
+    case 2:
+      if (enable)
+        PIT_TCTRL2 |= PIT_TCTRL_TEN_MASK;
+      else
+        PIT_TCTRL2 &= ~PIT_TCTRL_TEN_MASK;
+      break;
+    case 3:
+      if (enable)
+        PIT_TCTRL3 |= PIT_TCTRL_TEN_MASK;
+      else
+        PIT_TCTRL3 &= ~PIT_TCTRL_TEN_MASK;
+      break;
   }
 }
 
@@ -116,5 +149,30 @@ void __attribute__ ((interrupt)) PIT_ISR(void)
     OS_SemaphoreSignal(PIT1Sem);
   }
 
+  if (PIT_TFLG0 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT0Sem);
+  }
+
+  if (PIT_TFLG1 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG1 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT1Sem);
+  }
+
+  if (PIT_TFLG2 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG2 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT2Sem);
+  }
+
+  if (PIT_TFLG3 & PIT_TFLG_TIF_MASK)
+  {
+    PIT_TFLG3 |= PIT_TFLG_TIF_MASK;
+    OS_SemaphoreSignal(PIT3Sem);
+  }
+
   OS_ISRExit();
 }
+
