@@ -71,6 +71,7 @@ static bool LaunchCommand(TFCCOB* commonCommandObject)
 static bool WritePhrase(const uint8_t phrase[])
 {
   // Erase before programming
+  EnterCritical();
   if (Flash_Erase())
   {
     // Set tfcoob for program phrase command
@@ -90,8 +91,10 @@ static bool WritePhrase(const uint8_t phrase[])
     tfccob.data[7] = phrase[7];
 
     // Launch the command
+    ExitCritical();
     return LaunchCommand(&tfccob);
   }
+  ExitCritical();
   return FALSE;
 }
 

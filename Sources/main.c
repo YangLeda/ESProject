@@ -258,11 +258,11 @@ void PIT1Thread(void* pData)
     if (AnalogThreadData[0].tapping_status_code == 1)
     {
       // Lower
-      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
     }
     else if (AnalogThreadData[0].tapping_status_code == 2)
     {
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
     }
 
     Packet_Put(0xff, 0, NumOfLower->s.Lo, NumOfLower->s.Hi);
@@ -281,20 +281,19 @@ void PIT2Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT2Sem, 0);
 
-
     PIT_Enable(2, FALSE);
 
     AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
 
     // save to flash
-    if (AnalogThreadData[0].tapping_status_code == 1)
+    if (AnalogThreadData[1].tapping_status_code == 1)
     {
       // Lower
-      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
     }
-    else if (AnalogThreadData[0].tapping_status_code == 2)
+    else if (AnalogThreadData[1].tapping_status_code == 2)
     {
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
     }
 
     Packet_Put(0xff, 1, NumOfLower->s.Lo, NumOfLower->s.Hi);
@@ -314,21 +313,19 @@ void PIT3Thread(void* pData)
   {
     (void)OS_SemaphoreWait(PIT3Sem, 0);
 
-    Packet_Put(0xff, 3, 0, 0);
-
     PIT_Enable(3, FALSE);
 
     AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
 
     // save to flash
-    if (AnalogThreadData[0].tapping_status_code == 1)
+    if (AnalogThreadData[2].tapping_status_code == 1)
     {
       // Lower
-      Flash_Write16((uint16*) NumOfLower, NumOfLower + 1);
+      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
     }
-    else if (AnalogThreadData[0].tapping_status_code == 2)
+    else if (AnalogThreadData[2].tapping_status_code == 2)
     {
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise + 1);
+      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
     }
 
     Packet_Put(0xff, 2, NumOfLower->s.Lo, NumOfLower->s.Hi);
@@ -364,7 +361,7 @@ void AnalogThread(void* pData)
 
     if (analogData->rms < 2000)
     {
-      // PIT1 - period 3s
+      // PIT1 - period 5s
       if (analogData->timing == 0)
       {
         PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
@@ -376,7 +373,7 @@ void AnalogThread(void* pData)
     }
     else if (analogData->rms > 3000)
     {
-      // PIT - period 3s
+      // PIT - period 5s
       if (analogData->timing == 0)
       {
         PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
