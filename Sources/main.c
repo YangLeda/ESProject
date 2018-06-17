@@ -88,8 +88,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 0,
+    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
+    .sample_count = 15,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
     .timing = 0,
@@ -98,8 +99,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 1,
+    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
+    .sample_count = 15,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
     .timing = 0,
@@ -108,8 +110,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 2,
+    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
+    .sample_count = 15,
     .rms = 2.5,
-    .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
     .timing = 0,
@@ -309,13 +312,18 @@ void AnalogThread(void* pData)
     // Get analog sample
     Analog_Get(analogData->channelNb, &analogInputValue);
 
-    // Real voltage = analogInputValue / 3276.7
-    realVoltage = analogInputValue * 305 / 1e3;
+    // For debugging - output ch0 samples to ch3
+    if (analogData->channelNb == 0)
+      Analog_Put(3, analogInputValue);
 
-    // Calculate RMS Voltage
-    Algorithm_RMS(&(analogData->rms), &(analogData->sum_rms_squares), realVoltage);
+    // Real voltage = analogInputValue / 3276.7 V
+    // 1e-2 V
+    realVoltage = analogInputValue * 305 / 1e4;
 
-    if (analogData->rms < 2000)
+    // Calculate RMS Voltage - rms updated per cycle
+    Algorithm_RMS(analogData->channelNb, realVoltage);
+
+    if (analogData->rms < 200)
     {
       // PIT1 - period 5s
       if (analogData->timing == 0)
@@ -327,7 +335,7 @@ void AnalogThread(void* pData)
       analogData->voltage_status_code = 2;
 
     }
-    else if (analogData->rms > 3000)
+    else if (analogData->rms > 300)
     {
       // PIT - period 5s
       if (analogData->timing == 0)
@@ -338,7 +346,7 @@ void AnalogThread(void* pData)
 
       analogData->voltage_status_code = 1;
     }
-    else if (analogData->rms >= 2000 && analogData->rms <= 3000)
+    else if (analogData->rms >= 200 && analogData->rms <= 300)
     {
       analogData->voltage_status_code = 0;
       analogData->tapping_status_code = 0;

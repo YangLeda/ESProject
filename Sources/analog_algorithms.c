@@ -10,21 +10,29 @@
 
 #include "analog_algorithms.h"
 
-// Newton's method
-// Sample number is 16
-// " / 16" == " >> 4", " / 2" == " >> 1"
-void Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage)
+// One step Newton's method - RMS(n+1) = (RMS(n) + mean_rms_squares / RMS(n)) / 2
+void Algorithm_RMS(uint8_t ch, int16_t realVoltage)
 {
-  // Subtract one sample
-  *sum_rms_squares -= *sum_rms_squares >> 4;
-  // Add new RMS square
-  *sum_rms_squares += (uint32_t) realVoltage * realVoltage;
-  
-  // Avoid divide by 0
-  if (*rms == 0)
-    *rms = 1;
-  
-  // New rms
-  *rms = (*rms + (*sum_rms_squares >> 4) / *rms) >> 1;
+  // Put new voltage square into array
+  AnalogThreadData[ch].voltage_squares[AnalogThreadData[ch].sample_count] = (uint32_t) realVoltage * realVoltage;
+  AnalogThreadData[ch].sample_count ++;
+
+  // Calculate and update new rms each cycle
+  if (AnalogThreadData[ch].sample_count > 15)
+  {
+    uint32_t sumvoltageSquares = 0;
+    for (uint8_t i = 0; i < 16; i++)
+    {
+      sumvoltageSquares += AnalogThreadData[ch].voltage_squares[i];
+    }
+
+    // Avoid divide by 0
+    if (AnalogThreadData[ch].rms == 0)
+      AnalogThreadData[ch].rms = 1;
+
+    AnalogThreadData[ch].rms = (AnalogThreadData[ch].rms + (sumvoltageSquares >> 4) / AnalogThreadData[ch].rms) >> 1;
+
+    AnalogThreadData[ch].sample_count = 0;
+  }
 
 }

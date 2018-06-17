@@ -20,6 +20,7 @@
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 3
 
+
 /*! @brief Data structure used to pass Analog configuration to a user thread
  *
  */
@@ -27,14 +28,16 @@ typedef struct AnalogThreadData
 {
   OS_ECB* semaphore;
   uint8_t channelNb;
+  uint32_t voltage_squares[16];
+  uint8_t sample_count; // 0-15
   uint16_t rms;
-  uint32_t sum_rms_squares;
   uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
   uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
   uint16_t timing;
   uint16_t frequency; // Hz*10
 } TAnalogThreadData;
 
+extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 
 /*! @brief Sets up the PIT before first use.
  *
@@ -45,7 +48,7 @@ typedef struct AnalogThreadData
  *  @return bool - TRUE if the PIT was successfully initialized.
  *  @note Assumes that moduleClk has a period which can be expressed as an integral number of nanoseconds.
  */
-void Algorithm_RMS(uint16_t *rms, uint32_t *sum_rms_squares, int16_t realVoltage);
+void Algorithm_RMS(uint8_t ch, int16_t realVoltage);
 
 
 
