@@ -16,6 +16,7 @@
 #include "types.h"
 #include "UART.h"
 #include "Cpu.h"
+#include "analog_algorithms.h"
 
 // Packet structure
 #define PACKET_NB_BYTES 5
@@ -67,8 +68,12 @@ extern TPacket Packet;
 // Acknowledgment bit mask
 extern const uint8_t PACKET_ACK_MASK;
 
-extern uint16union_t* volatile NvTowerNb;
-extern uint16union_t* volatile NvTowerMd;
+extern uint16union_t* volatile NumOfRaise;
+extern uint16union_t* volatile NumOfLower;
+
+extern bool InverseTimingMode;
+
+extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 
 
 /*! @brief Initializes the packets by calling the initialization routines of the supporting software modules.

@@ -20,6 +20,21 @@
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 3
 
+/*! @brief Data structure used to pass Analog configuration to a user thread
+ *
+ */
+typedef struct AnalogThreadData
+{
+  OS_ECB* semaphore;
+  uint8_t channelNb;
+  uint16_t rms;
+  uint32_t sum_rms_squares;
+  uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
+  uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
+  uint16_t timing;
+  uint16_t frequency; // Hz*10
+} TAnalogThreadData;
+
 
 /*! @brief Sets up the PIT before first use.
  *

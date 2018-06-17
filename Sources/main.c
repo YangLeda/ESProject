@@ -72,29 +72,19 @@ OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 
 
-// Non-volatile variables for ...
+// Non-volatile variables for numbers of raise/lower events
+// Flash WritePhrase is in critical section
 uint16union_t* volatile NumOfRaise;
 uint16union_t* volatile NumOfLower;
 
+// True - inverse timing mode; False - definite timing mode
+bool InverseTimingMode = FALSE;
 
-/*! @brief Data structure used to pass Analog configuration to a user thread
- *
- */
-typedef struct AnalogThreadData
-{
-  OS_ECB* semaphore;
-  uint8_t channelNb;
-  uint16_t rms;
-  uint32_t sum_rms_squares;
-  uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
-  uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
-  uint16_t timing;
-} TAnalogThreadData;
 
 /*! @brief Analog thread configuration data
  *
  */
-static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
+TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 {
   {
     .semaphore = NULL,
@@ -103,7 +93,8 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0
+    .timing = 0,
+    .frequency = 500
   },
   {
     .semaphore = NULL,
@@ -112,7 +103,8 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0
+    .timing = 0,
+    .frequency = 500
   },
   {
     .semaphore = NULL,
@@ -121,19 +113,17 @@ static TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .sum_rms_squares = 1UL * 2.5 * 2.5 * 16,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0
+    .timing = 0,
+    .frequency = 500
   }
 };
 
 
-/*! @brief Initialises modules.
+/*! @brief Initializes modules and send a startup packet.
  *
  */
 static void InitModulesThread(void* pData)
 {
-
-
-
   // Initialize modules
   bool ledsInitResult = LEDs_Init();
   bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
@@ -145,29 +135,25 @@ static void InitModulesThread(void* pData)
   PIT_Set(0, 125e4, FALSE);
   PIT_Enable(0, TRUE);
 
-
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
 
-  // Set tower number and tower mode
+  // Initialize number of raise/lower events to 0
   Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
   Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
-  // init to 0
   Flash_Write16((uint16*) NumOfRaise, 0);
   Flash_Write16((uint16*) NumOfLower, 0);
 
-
   // Send startup packets
-  Packet_Put(0x04, 0, 0, 0); // Special - Startup
-  Packet_Put(0x09, 'v', 6, 0); // Special - Version number
+  Packet_Put(0x04, 0, 0, 0);
 
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
 }
 
 
-/*! @brief 16 samples per cycle & control 3 outputs
+/*! @brief Sample rate 16 per cycle and control 3 outputs.
  *
  */
 void PIT0Thread(void* pData)
@@ -181,7 +167,6 @@ void PIT0Thread(void* pData)
     {
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
     }
-    
     
     bool hasAlarming = FALSE;
     bool hasRaiseTapping = FALSE;
@@ -198,7 +183,6 @@ void PIT0Thread(void* pData)
       else if (AnalogThreadData[analogNb].tapping_status_code == 2)
         hasRaiseTapping = TRUE;
     }
-
 
     // If one or more channel is alarming
     if (hasAlarming)
@@ -240,100 +224,71 @@ void PIT0Thread(void* pData)
 }
 
 
-/*! @brief channel 0 time out
+/*! @brief Analog channel 0 alarm time out.
  *
  */
-// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
 void PIT1Thread(void* pData)
 {
   for (;;)
   {
     (void)OS_SemaphoreWait(PIT1Sem, 0);
 
+    // Disable PIT
     PIT_Enable(1, FALSE);
 
     AnalogThreadData[0].tapping_status_code = AnalogThreadData[0].voltage_status_code;
 
-    // save to flash
+    // Update event number to flash
     if (AnalogThreadData[0].tapping_status_code == 1)
-    {
-      // Lower
       Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    }
     else if (AnalogThreadData[0].tapping_status_code == 2)
-    {
       Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
-    }
-
-    Packet_Put(0xff, 0, NumOfLower->s.Lo, NumOfLower->s.Hi);
-    Packet_Put(0xff, 0, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
-
   }
 }
 
-/*! @brief channel 0 time out
+/*! @brief Analog channel 1 alarm time out.
  *
  */
-// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
 void PIT2Thread(void* pData)
 {
   for (;;)
   {
     (void)OS_SemaphoreWait(PIT2Sem, 0);
 
+    // Disable PIT
     PIT_Enable(2, FALSE);
 
     AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
 
-    // save to flash
+    // Update event number to flash
     if (AnalogThreadData[1].tapping_status_code == 1)
-    {
-      // Lower
       Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    }
     else if (AnalogThreadData[1].tapping_status_code == 2)
-    {
       Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
-    }
-
-    Packet_Put(0xff, 1, NumOfLower->s.Lo, NumOfLower->s.Hi);
-    Packet_Put(0xff, 1, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
-
   }
 }
 
-
-/*! @brief channel 0 time out
+/*! @brief Analog channel 2 alarm time out.
  *
  */
-// Global static status bools(alarming) are writen in other threads and read here. So access is put into critical section.
 void PIT3Thread(void* pData)
 {
   for (;;)
   {
     (void)OS_SemaphoreWait(PIT3Sem, 0);
 
+    // Disable PIT
     PIT_Enable(3, FALSE);
 
     AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
 
-    // save to flash
+    // Update event number to flash
     if (AnalogThreadData[2].tapping_status_code == 1)
-    {
-      // Lower
       Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    }
     else if (AnalogThreadData[2].tapping_status_code == 2)
-    {
       Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
-    }
-
-    Packet_Put(0xff, 2, NumOfLower->s.Lo, NumOfLower->s.Hi);
-    Packet_Put(0xff, 2, NumOfRaise->s.Lo, NumOfRaise->s.Hi);
-
   }
 }
-
 
 /*! @brief Samples a value on an ADC channel & start timer
  *
@@ -391,9 +346,6 @@ void AnalogThread(void* pData)
       PIT_Enable(analogData->channelNb + 1, FALSE);
       analogData->timing = 0;
     }
-
-    // test put
-    //Packet_Put(0xff, analogData->channelNb, analogData->rms >> 8, analogData->rms);
 
   }
 }

@@ -60,8 +60,8 @@ bool Packet_Get(void)
       UART_InChar(&Packet_Checksum);
       if (Packet_Checksum == (Packet_Command ^ Packet_Parameter1 ^ Packet_Parameter2 ^ Packet_Parameter3))
       {
-	NbBytesInPacket = 0;
-	return TRUE;
+        NbBytesInPacket = 0;
+        return TRUE;
       }
       // Remove the first byte
       Packet_Command = Packet_Parameter1;
@@ -100,55 +100,136 @@ static bool Handle_Startup_Packet(void)
 {
   if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0 && Packet_Parameter3 == 0)
   {
-    Packet_Put(0x04, 0, 0, 0); // Special - Startup
-    Packet_Put(0x09, 'v', 6, 0); // Special - Version number
+    Packet_Put(0x04, 0, 0, 0);
     return TRUE;
   }
-  else
-    return FALSE;
+  return FALSE;
 }
 
-/*! @brief Handle the Special - Get version command.
+/*! @brief Handle the Timing mode command.
  *
  *  @return bool - TRUE if handle successful
  *  	           FALSE if handle failed
  */
-static bool Handle_Version_Packet(void)
+static bool Handle_Timing_Mode_Packet(void)
 {
-  if (Packet_Parameter1 == 'v' && Packet_Parameter2 == 'x' && Packet_Parameter3 == 0xD)
-    return Packet_Put(0x09, 'v', 1, 0);
-  else
-    return FALSE;
+  if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0x00) // Get timing mode
+  {
+    if (InverseTimingMode == FALSE)
+      Packet_Put(0x10, 1, 0, 0);
+    else
+      Packet_Put(0x10, 2, 0, 0);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 1 && Packet_Parameter2 == 0x00) // Set to definite mode
+  {
+    InverseTimingMode = FALSE;
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 2 && Packet_Parameter2 == 0x00) // Set to inverse mode
+  {
+    InverseTimingMode = TRUE;
+    return TRUE;
+  }
+  return FALSE;
 }
 
-
-
-/*! @brief Handle the Flash - Read byte command.
+/*! @brief Handle the Number of raises packet.
  *
  *  @return bool - TRUE if handle successful
- *  	           FALSE if handle failed
+ *               FALSE if handle failed
  */
-static bool Handle_FlashRead_Packet(void)
+static bool Handle_Raises_Packet(void)
 {
-  if (Packet_Parameter1 >= 0 && Packet_Parameter1 <= 0x07 && Packet_Parameter2 == 0 && Packet_Parameter3 == 0)
-    return Packet_Put(0x08, Packet_Parameter1, 0, _FB(FLASH_DATA_START + (uint32_t) Packet_Parameter1)); // Put Flash byte in packet
-  else
-    return FALSE;
+  if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0x00) // Get
+  {
+    Packet_Put(0x11, NumOfRaise->l, 0, 0);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 1 && Packet_Parameter2 == 0x00) // Reset to 0
+  {
+    Flash_Write16((uint16*) NumOfRaise, 0);
+    return TRUE;
+  }
+  return FALSE;
 }
 
-/*! @brief Handle the Flash - Program byte command.
+/*! @brief Handle the Handle the Number of raises packet.
  *
  *  @return bool - TRUE if handle successful
- *  	           FALSE if handle failed
+ *               FALSE if handle failed
  */
-static bool Handle_FlashProgram_Packet(void)
+static bool Handle_Lowers_Packet(void)
 {
-  if (Packet_Parameter1 >= 0 && Packet_Parameter1 <= 0x07 && Packet_Parameter2 == 0) // Program Flash
-    return Flash_Write8((uint8*) (FLASH_DATA_START + Packet_Parameter1), Packet_Parameter3);
-  else if (Packet_Parameter1 == 0x08 && Packet_Parameter2 == 0) // Erase the entire Flash sector
-    return Flash_Erase();
-  else
-    return FALSE;
+  if (Packet_Parameter1 == 0 && Packet_Parameter2 == 0x00) // Get
+  {
+    Packet_Put(0x12, NumOfLower->l, 0, 0);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 1 && Packet_Parameter2 == 0x00) // Reset to 0
+  {
+    Flash_Write16((uint16*) NumOfLower, 0);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/*! @brief Handle the Handle the Voltage packet.
+ *
+ *  @return bool - TRUE if handle successful
+ *               FALSE if handle failed
+ */
+static bool Handle_RMS_Packet(void)
+{
+  if (Packet_Parameter1 == 0) // Get all
+  {
+    Packet_Put(0x18, 1, AnalogThreadData[0].rms, AnalogThreadData[0].rms >> 8);
+    Packet_Put(0x18, 2, AnalogThreadData[1].rms, AnalogThreadData[1].rms >> 8);
+    Packet_Put(0x18, 3, AnalogThreadData[2].rms, AnalogThreadData[2].rms >> 8);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 1) // Get channel 0
+  {
+    Packet_Put(0x18, 1, AnalogThreadData[0].rms, AnalogThreadData[0].rms >> 8);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 2) // Get channel 1
+  {
+    Packet_Put(0x18, 2, AnalogThreadData[1].rms, AnalogThreadData[1].rms >> 8);
+    return TRUE;
+  }
+  else if (Packet_Parameter1 == 3) // Get channel 2
+  {
+    Packet_Put(0x18, 3, AnalogThreadData[2].rms, AnalogThreadData[2].rms >> 8);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/*! @brief Handle the Handle the Frequency packet.
+ *
+ *  @return bool - TRUE if handle successful
+ *               FALSE if handle failed
+ */
+static bool Handle_Frequency_Packet(void)
+{
+  Packet_Put(0x17, AnalogThreadData[0].frequency, AnalogThreadData[0].frequency >> 8, 0);
+  return TRUE;
+}
+
+/*! @brief Handle the Handle Spectrum packet.
+ *
+ *  @return bool - TRUE if handle successful
+ *               FALSE if handle failed
+ */
+static bool Handle_Spectrum_Packet(void)
+{
+  if (Packet_Parameter1 >= 0 && Packet_Parameter1 <= 7)
+  {
+    Packet_Put(0x19, Packet_Parameter1, 0, 0);
+    return TRUE;
+  }
+  return FALSE;
 }
 
 /*! @brief Routine to handle the packet.
@@ -166,23 +247,23 @@ void Handle_Packet(void)
     case 0x04:
       successFlag = Handle_Startup_Packet();
       break;
-    case 0x09:
-      successFlag = Handle_Version_Packet();
+    case 0x10:
+      successFlag = Handle_Timing_Mode_Packet();
       break;
-    case 0x08:
-      successFlag = Handle_FlashRead_Packet();
+    case 0x11:
+      successFlag = Handle_Raises_Packet();
       break;
-    case 0x07:
-      successFlag = Handle_FlashProgram_Packet();
+    case 0x12:
+      successFlag = Handle_Lowers_Packet();
       break;
-    case 0x0D:
-      //successFlag = Handle_Mode_Packet();
+    case 0x17:
+      successFlag = Handle_Frequency_Packet();
       break;
-    case 0x0C:
-      //successFlag = Handle_Time_Set_Packet();
+    case 0x18:
+      successFlag = Handle_RMS_Packet();
       break;
-    case 0x0A:
-      //successFlag = Handle_Protocol_Mode_Packet();
+    case 0x19:
+      successFlag = Handle_Spectrum_Packet();
       break;
     default:
       successFlag = FALSE; // Incorrect command byte
