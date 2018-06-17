@@ -29,7 +29,6 @@ typedef struct
   uint8_t Buffer[FIFO_SIZE];	/*!< The actual array of bytes to store the data */
   OS_ECB *SpaceAvailableSem;	/*!< Semaphore of space available */
   OS_ECB *ItemsAvailableSem;	/*!< Semaphore of not empty */
-  OS_ECB *BufferAccessSem;	/*!< Semaphore of buffer access */
 } TFIFO;
 
 /*! @brief Initialize the FIFO before first use.

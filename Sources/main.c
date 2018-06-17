@@ -138,17 +138,10 @@ static void InitModulesThread(void* pData)
   // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
   PIT_Set(0, 125e4 , FALSE);
   PIT_Enable(0, TRUE);
-  // PIT1 - period 50ms in nanosecond is 500e6
-  PIT_Set(1, 5e7 , FALSE);
-  PIT_Enable(1, TRUE);
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
-
-  // Orange LED on if all init success
-  if (ledsInitResult && packetInitResult && flashInitResult && analogInitResult && pitInitResults)
-    LEDs_On(LED_BLUE);
 
   // Set tower number and tower mode
   Flash_AllocateVar((volatile void**) &NvTowerNb, sizeof(*NvTowerNb));
@@ -214,12 +207,12 @@ void PIT1Thread(void* pData)
     // If one or more channel is alarming
     if (alarmingChannelNumber > 0)
     {
-      LEDs_On(LED_GREEN);
+      LEDs_On(LED_BLUE);
       Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
     }
     else
     {
-      LEDs_Off(LED_GREEN);
+      LEDs_Off(LED_BLUE);
       Analog_Put(ANALOG_ALARM_CHANNEL, 0);
     }
     
@@ -259,6 +252,10 @@ void AnalogThread(void* pData)
     }
     else if (analogData->rms > 3000)
     {
+      // PIT1 - period 50ms in nanosecond is 500e6
+      PIT_Set(1, 5e7 , FALSE);
+      PIT_Enable(1, TRUE);
+
       EnterCritical();
       analogData->alarming = TRUE;
       ExitCritical();
@@ -300,7 +297,7 @@ int main(void)
   PE_low_level_init();
 
   // Initialize the RTOS
-  OS_Init(CPU_CORE_CLK_HZ, true);
+  OS_Init(CPU_CORE_CLK_HZ, FALSE);
 
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
