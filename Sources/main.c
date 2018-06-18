@@ -57,6 +57,7 @@
 #define ANALOG_5V 16384
 #define TIME_DEFINITE 1e9
 
+
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
@@ -94,7 +95,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .rms = 2.5,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0,
+    .timing = FALSE,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
     .frequency = 500
   },
   {
@@ -105,7 +108,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .rms = 2.5,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0,
+    .timing = FALSE,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
     .frequency = 500
   },
   {
@@ -116,7 +121,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .rms = 2.5,
     .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = 0,
+    .timing = FALSE,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
     .frequency = 500
   }
 };
@@ -257,26 +264,26 @@ void CycleThread(void* pData)
 
     //Packet_Put(0x04, 0, 0, 0);
 
-    // Check each channel's RMS
+    // Check each channel's RMS and update timers
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
       if (AnalogThreadData[analogNb].rms < 200)
       {
         // PIT - period 5s
-        if (AnalogThreadData[analogNb].timing == 0)
+        if (!AnalogThreadData[analogNb].timing)
         {
           PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = 1;
+          AnalogThreadData[analogNb].timing = TRUE;
         }
         AnalogThreadData[analogNb].voltage_status_code = 2;
       }
       else if (AnalogThreadData[analogNb].rms > 300)
       {
         // PIT - period 5s
-        if (AnalogThreadData[analogNb].timing == 0)
+        if (!AnalogThreadData[analogNb].timing)
         {
           PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = 1;
+          AnalogThreadData[analogNb].timing = TRUE;
         }
         AnalogThreadData[analogNb].voltage_status_code = 1;
       }
@@ -287,7 +294,7 @@ void CycleThread(void* pData)
 
         // PIT - stop timing
         PIT_Enable(AnalogThreadData[analogNb].channelNb + 1, FALSE);
-        AnalogThreadData[analogNb].timing = 0;
+        AnalogThreadData[analogNb].timing = FALSE;
       }
     } // End for
 

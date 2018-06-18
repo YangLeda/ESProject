@@ -33,7 +33,9 @@ typedef struct AnalogThreadData
   uint16_t rms;
   uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
   uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
-  uint16_t timing;
+  bool timing;
+  uint16_t target_timing_count;
+  uint16_t current_timing_count;
   uint16_t frequency; // Hz*10
 } TAnalogThreadData;
 
