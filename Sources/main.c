@@ -161,7 +161,7 @@ static void InitModulesThread(void* pData)
 }
 
 
-/*! @brief Sample rate 16 per cycle and control 3 outputs.
+/*! @brief Sample rate 16 per cycle.
  *
  */
 void PIT0Thread(void* pData)
@@ -175,59 +175,7 @@ void PIT0Thread(void* pData)
     {
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
     }
-    
-    bool hasAlarming = FALSE;
-    bool hasRaiseTapping = FALSE;
-    bool hasLowerTapping = FALSE;
 
-    // Check each analog channel status
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    {
-      if (AnalogThreadData[analogNb].voltage_status_code > 0)
-        hasAlarming = TRUE;
-
-      if (AnalogThreadData[analogNb].tapping_status_code == 1)
-        hasLowerTapping = TRUE;
-      else if (AnalogThreadData[analogNb].tapping_status_code == 2)
-        hasRaiseTapping = TRUE;
-    }
-
-    // If one or more channel is alarming
-    if (hasAlarming)
-    {
-      LEDs_On(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
-    }
-
-    // If one or more channel is raise tapping
-    if (hasRaiseTapping)
-    {
-      LEDs_On(LED_YELLOW);
-      Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_YELLOW);
-      Analog_Put(ANALOG_RAISE_CHANNEL, 0);
-    }
-
-    // If one or more channel is lower tapping
-    if (hasLowerTapping)
-    {
-      LEDs_On(LED_GREEN);
-      Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_GREEN);
-      Analog_Put(ANALOG_LOWER_CHANNEL, 0);
-    }
-    
   }
 }
 
@@ -298,7 +246,7 @@ void PIT3Thread(void* pData)
   }
 }
 
-/*! @brief Each cycle.
+/*! @brief Each cycle. Check each channel's RMS. Set and update 3 timers. Control 3 outputs.
  *
  */
 void CycleThread(void* pData)
@@ -307,7 +255,94 @@ void CycleThread(void* pData)
   {
     (void)OS_SemaphoreWait(CycleSem, 0);
 
-    Packet_Put(0x04, 0, 0, 0);
+    //Packet_Put(0x04, 0, 0, 0);
+
+    // Check each channel's RMS
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    {
+      if (AnalogThreadData[analogNb].rms < 200)
+      {
+        // PIT - period 5s
+        if (AnalogThreadData[analogNb].timing == 0)
+        {
+          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+          AnalogThreadData[analogNb].timing = 1;
+        }
+        AnalogThreadData[analogNb].voltage_status_code = 2;
+      }
+      else if (AnalogThreadData[analogNb].rms > 300)
+      {
+        // PIT - period 5s
+        if (AnalogThreadData[analogNb].timing == 0)
+        {
+          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+          AnalogThreadData[analogNb].timing = 1;
+        }
+        AnalogThreadData[analogNb].voltage_status_code = 1;
+      }
+      else if (AnalogThreadData[analogNb].rms >= 200 && AnalogThreadData[analogNb].rms <= 300)
+      {
+        AnalogThreadData[analogNb].voltage_status_code = 0;
+        AnalogThreadData[analogNb].tapping_status_code = 0;
+
+        // PIT - stop timing
+        PIT_Enable(AnalogThreadData[analogNb].channelNb + 1, FALSE);
+        AnalogThreadData[analogNb].timing = 0;
+      }
+    } // End for
+
+
+    bool hasAlarming = FALSE;
+    bool hasRaiseTapping = FALSE;
+    bool hasLowerTapping = FALSE;
+
+    // Check each analog channel status
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    {
+      if (AnalogThreadData[analogNb].voltage_status_code > 0)
+        hasAlarming = TRUE;
+
+      if (AnalogThreadData[analogNb].tapping_status_code == 1)
+        hasLowerTapping = TRUE;
+      else if (AnalogThreadData[analogNb].tapping_status_code == 2)
+        hasRaiseTapping = TRUE;
+    }
+
+    // If one or more channel is alarming
+    if (hasAlarming)
+    {
+      LEDs_On(LED_BLUE);
+      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_BLUE);
+      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+    }
+
+    // If one or more channel is raise tapping
+    if (hasRaiseTapping)
+    {
+      LEDs_On(LED_YELLOW);
+      Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_YELLOW);
+      Analog_Put(ANALOG_RAISE_CHANNEL, 0);
+    }
+
+    // If one or more channel is lower tapping
+    if (hasLowerTapping)
+    {
+      LEDs_On(LED_GREEN);
+      Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
+    }
+    else
+    {
+      LEDs_Off(LED_GREEN);
+      Analog_Put(ANALOG_LOWER_CHANNEL, 0);
+    }
 
   }
 }
@@ -340,39 +375,6 @@ void AnalogThread(void* pData)
 
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
-
-    if (analogData->rms < 200)
-    {
-      // PIT1 - period 5s
-      if (analogData->timing == 0)
-      {
-        PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
-        analogData->timing = 1;
-      }
-
-      analogData->voltage_status_code = 2;
-
-    }
-    else if (analogData->rms > 300)
-    {
-      // PIT - period 5s
-      if (analogData->timing == 0)
-      {
-        PIT_Set(analogData->channelNb + 1, TIME_DEFINITE, TRUE);
-        analogData->timing = 1;
-      }
-
-      analogData->voltage_status_code = 1;
-    }
-    else if (analogData->rms >= 200 && analogData->rms <= 300)
-    {
-      analogData->voltage_status_code = 0;
-      analogData->tapping_status_code = 0;
-
-      // PIT - stop timing
-      PIT_Enable(analogData->channelNb + 1, FALSE);
-      analogData->timing = 0;
-    }
 
   }
 }
@@ -417,14 +419,14 @@ int main(void)
                             ANALOG_THREAD_PRIORITIES[threadNb]);
   // Create PIT0 thread
   error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
-  // Create PIT1 thread
-  error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 7);
-  // Create PIT2 thread
-  error = OS_ThreadCreate(PIT2Thread, NULL, &PIT2ThreadStack[THREAD_STACK_SIZE-1], 8);
-  // Create PIT3 thread
-  error = OS_ThreadCreate(PIT3Thread, NULL, &PIT3ThreadStack[THREAD_STACK_SIZE-1], 9);
   // Create Cycle thread
-  error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 10);
+  error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 7);
+  // Create PIT1 thread
+  error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 8);
+  // Create PIT2 thread
+  error = OS_ThreadCreate(PIT2Thread, NULL, &PIT2ThreadStack[THREAD_STACK_SIZE-1], 9);
+  // Create PIT3 thread
+  error = OS_ThreadCreate(PIT3Thread, NULL, &PIT3ThreadStack[THREAD_STACK_SIZE-1], 10);
   // Create Packet thread
   error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 11);
 
