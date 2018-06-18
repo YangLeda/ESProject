@@ -93,9 +93,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
     .rms = 2.5,
-    .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = FALSE,
+    .timing_status = 0,
     .target_timing_count = 0,
     .current_timing_count = 0,
     .frequency = 500
@@ -106,9 +105,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
     .rms = 2.5,
-    .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = FALSE,
+    .timing_status = 0,
     .target_timing_count = 0,
     .current_timing_count = 0,
     .frequency = 500
@@ -119,9 +117,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
     .rms = 2.5,
-    .voltage_status_code = 0,
     .tapping_status_code = 0,
-    .timing = FALSE,
+    .timing_status = 0,
     .target_timing_count = 0,
     .current_timing_count = 0,
     .frequency = 500
@@ -199,7 +196,10 @@ void PIT1Thread(void* pData)
     // Disable PIT
     PIT_Enable(1, FALSE);
 
-    AnalogThreadData[0].tapping_status_code = AnalogThreadData[0].voltage_status_code;
+    if (AnalogThreadData[0].rms > 300)
+      AnalogThreadData[0].tapping_status_code = 1;
+    else if (AnalogThreadData[0].rms < 200)
+      AnalogThreadData[0].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[0].tapping_status_code == 1)
@@ -221,7 +221,10 @@ void PIT2Thread(void* pData)
     // Disable PIT
     PIT_Enable(2, FALSE);
 
-    AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
+    if (AnalogThreadData[1].rms > 300)
+      AnalogThreadData[1].tapping_status_code = 1;
+    else if (AnalogThreadData[1].rms < 200)
+      AnalogThreadData[1].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[1].tapping_status_code == 1)
@@ -243,7 +246,10 @@ void PIT3Thread(void* pData)
     // Disable PIT
     PIT_Enable(3, FALSE);
 
-    AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
+    if (AnalogThreadData[2].rms > 300)
+      AnalogThreadData[2].tapping_status_code = 1;
+    else if (AnalogThreadData[2].rms < 200)
+      AnalogThreadData[2].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[2].tapping_status_code == 1)
@@ -262,41 +268,40 @@ void CycleThread(void* pData)
   {
     (void)OS_SemaphoreWait(CycleSem, 0);
 
-    //Packet_Put(0x04, 0, 0, 0);
-
     // Check each channel's RMS and update timers
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
-      if (AnalogThreadData[analogNb].rms < 200)
+      if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
       {
-        // PIT - period 5s
-        if (!AnalogThreadData[analogNb].timing)
+        if (*TimingMode == 1) // Definite mode
         {
-          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = TRUE;
+          if (AnalogThreadData[analogNb].timing_status != 1) // Not timing or is inverse timing
+          {
+            PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+            AnalogThreadData[analogNb].timing_status = 1;
+          }
         }
-        AnalogThreadData[analogNb].voltage_status_code = 2;
-      }
-      else if (AnalogThreadData[analogNb].rms > 300)
-      {
-        // PIT - period 5s
-        if (!AnalogThreadData[analogNb].timing)
+        else // Inverse mode
         {
-          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = TRUE;
-        }
-        AnalogThreadData[analogNb].voltage_status_code = 1;
-      }
-      else if (AnalogThreadData[analogNb].rms >= 200 && AnalogThreadData[analogNb].rms <= 300)
-      {
-        AnalogThreadData[analogNb].voltage_status_code = 0;
-        AnalogThreadData[analogNb].tapping_status_code = 0;
+          if (AnalogThreadData[analogNb].timing_status != 2) // Not timing or is definite timing, start inverse timing
+          {
 
+          }
+          else // Is inverse timing, update timer
+          {
+
+          }
+          AnalogThreadData[analogNb].timing_status = 2;
+        }
+      }
+      else // RMS in range
+      {
+        AnalogThreadData[analogNb].tapping_status_code = 0;
         // PIT - stop timing
         PIT_Enable(AnalogThreadData[analogNb].channelNb + 1, FALSE);
-        AnalogThreadData[analogNb].timing = FALSE;
+        AnalogThreadData[analogNb].timing_status = 0;
       }
-    } // End for
+    }
 
 
     bool hasAlarming = FALSE;
@@ -306,7 +311,7 @@ void CycleThread(void* pData)
     // Check each analog channel status
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
-      if (AnalogThreadData[analogNb].voltage_status_code > 0)
+      if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
         hasAlarming = TRUE;
 
       if (AnalogThreadData[analogNb].tapping_status_code == 1)
