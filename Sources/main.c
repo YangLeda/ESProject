@@ -55,7 +55,11 @@
 #define ANALOG_ALARM_CHANNEL 2
 
 #define ANALOG_5V 16384
+// Initial sample period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
+#define INITIAL_SAMPLE_PERIOD 125e4
+#define INITIAL_TIMING_MODE 1
 #define TIME_DEFINITE 1e9
+
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -91,36 +95,68 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .channelNb = 0,
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
-    .rms = 2.5,
-    .voltage_status_code = 0,
+    .rms = 250,
     .tapping_status_code = 0,
-    .timing = 0,
-    .frequency = 500
+    .timing_status = 0,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
+    .frequency = 500,
+    .last_sample = 0,
+    .frequency_tracking_sample_count = 0,
+    .crossingNb = 0,
+    .offset1 = 0,
+    .offset1 = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 1,
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
-    .rms = 2.5,
-    .voltage_status_code = 0,
+    .rms = 250,
     .tapping_status_code = 0,
-    .timing = 0,
-    .frequency = 500
+    .timing_status = 0,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
+    .frequency = 500,
+    .last_sample = 0,
+    .frequency_tracking_sample_count = 0,
+    .crossingNb = 0,
+    .offset1 = 0,
+    .offset1 = 0
   },
   {
     .semaphore = NULL,
     .channelNb = 2,
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
-    .rms = 2.5,
-    .voltage_status_code = 0,
+    .rms = 250,
     .tapping_status_code = 0,
-    .timing = 0,
-    .frequency = 500
+    .timing_status = 0,
+    .target_timing_count = 0,
+    .current_timing_count = 0,
+    .frequency = 500,
+    .last_sample = 0,
+    .frequency_tracking_sample_count = 0,
+    .crossingNb = 0,
+    .offset1 = 0,
+    .offset1 = 0
   }
 };
 
+void Tap(uint8_t channelNb)
+{
+
+  if (AnalogThreadData[channelNb].rms > 300)
+    AnalogThreadData[channelNb].tapping_status_code = 1;
+  else if (AnalogThreadData[channelNb].rms < 200)
+    AnalogThreadData[channelNb].tapping_status_code = 2;
+
+  // Update event number to flash
+  if (AnalogThreadData[channelNb].tapping_status_code == 1)
+    Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
+  else if (AnalogThreadData[channelNb].tapping_status_code == 2)
+    Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
+}
 
 /*! @brief Initializes modules and send a startup packet.
  *
@@ -137,8 +173,8 @@ static void InitModulesThread(void* pData)
   // Initialize cycle semaphore
   CycleSem = OS_SemaphoreCreate(0);
 
-  // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-  PIT_Set(0, 125e4, FALSE);
+  // PIT0
+  PIT_Set(0, INITIAL_SAMPLE_PERIOD, FALSE);
   PIT_Enable(0, TRUE);
 
   // Generate the global analog semaphores
@@ -151,7 +187,7 @@ static void InitModulesThread(void* pData)
   Flash_AllocateVar((volatile void**) &TimingMode, sizeof(*TimingMode));
   Flash_Write16((uint16*) NumOfRaise, 0);
   Flash_Write16((uint16*) NumOfLower, 0);
-  Flash_Write8(TimingMode, 1);
+  Flash_Write8(TimingMode, INITIAL_TIMING_MODE);
 
   // Send startup packets
   Packet_Put(0x04, 0, 0, 0);
@@ -192,7 +228,10 @@ void PIT1Thread(void* pData)
     // Disable PIT
     PIT_Enable(1, FALSE);
 
-    AnalogThreadData[0].tapping_status_code = AnalogThreadData[0].voltage_status_code;
+    if (AnalogThreadData[0].rms > 300)
+      AnalogThreadData[0].tapping_status_code = 1;
+    else if (AnalogThreadData[0].rms < 200)
+      AnalogThreadData[0].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[0].tapping_status_code == 1)
@@ -214,7 +253,10 @@ void PIT2Thread(void* pData)
     // Disable PIT
     PIT_Enable(2, FALSE);
 
-    AnalogThreadData[1].tapping_status_code = AnalogThreadData[1].voltage_status_code;
+    if (AnalogThreadData[1].rms > 300)
+      AnalogThreadData[1].tapping_status_code = 1;
+    else if (AnalogThreadData[1].rms < 200)
+      AnalogThreadData[1].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[1].tapping_status_code == 1)
@@ -236,7 +278,10 @@ void PIT3Thread(void* pData)
     // Disable PIT
     PIT_Enable(3, FALSE);
 
-    AnalogThreadData[2].tapping_status_code = AnalogThreadData[2].voltage_status_code;
+    if (AnalogThreadData[2].rms > 300)
+      AnalogThreadData[2].tapping_status_code = 1;
+    else if (AnalogThreadData[2].rms < 200)
+      AnalogThreadData[2].tapping_status_code = 2;
 
     // Update event number to flash
     if (AnalogThreadData[2].tapping_status_code == 1)
@@ -255,41 +300,62 @@ void CycleThread(void* pData)
   {
     (void)OS_SemaphoreWait(CycleSem, 0);
 
-    //Packet_Put(0x04, 0, 0, 0);
-
-    // Check each channel's RMS
+    // Check each channel's RMS and update timers
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
-      if (AnalogThreadData[analogNb].rms < 200)
+      if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
       {
-        // PIT - period 5s
-        if (AnalogThreadData[analogNb].timing == 0)
+        if (*TimingMode == 1) // Definite mode
         {
-          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = 1;
+          if (AnalogThreadData[analogNb].timing_status != 1) // Not timing or is inverse timing
+          {
+            PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+            AnalogThreadData[analogNb].timing_status = 1;
+          }
         }
-        AnalogThreadData[analogNb].voltage_status_code = 2;
-      }
-      else if (AnalogThreadData[analogNb].rms > 300)
-      {
-        // PIT - period 5s
-        if (AnalogThreadData[analogNb].timing == 0)
+        else // Inverse mode
         {
-          PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
-          AnalogThreadData[analogNb].timing = 1;
-        }
-        AnalogThreadData[analogNb].voltage_status_code = 1;
-      }
-      else if (AnalogThreadData[analogNb].rms >= 200 && AnalogThreadData[analogNb].rms <= 300)
-      {
-        AnalogThreadData[analogNb].voltage_status_code = 0;
-        AnalogThreadData[analogNb].tapping_status_code = 0;
+          uint16_t deviation; // Deviation of RMS
+          if (AnalogThreadData[analogNb].rms < 200)
+            deviation = 200 - AnalogThreadData[analogNb].rms;
+          else
+            deviation = AnalogThreadData[analogNb].rms - 200;
 
+          uint16_t targetTimingCount; // Target number of counts before time out
+          targetTimingCount = 16 * 25 * AnalogThreadData[analogNb].frequency / deviation;
+
+
+          if (AnalogThreadData[analogNb].timing_status != 2) // Not timing or is definite timing, start inverse timing
+          {
+            AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
+            AnalogThreadData[analogNb].current_timing_count = 0;
+            AnalogThreadData[analogNb].timing_status = 2;
+            ///
+            Packet_Put(0x01, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+          }
+          else // Already inverse timing
+          {
+            if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
+              Tap(analogNb);
+
+            //targetTimingCount = (double)(AnalogThreadData[analogNb].target_timing_count - AnalogThreadData[analogNb].current_timing_count) / AnalogThreadData[analogNb].target_timing_count * targetTimingCount;
+            //targetTimingCount = (uint16_t)(0.5F * targetTimingCount);
+            //AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
+            AnalogThreadData[analogNb].current_timing_count = 0;
+            ///
+            Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+
+          }
+        }
+      }
+      else // RMS in range
+      {
+        AnalogThreadData[analogNb].tapping_status_code = 0;
         // PIT - stop timing
         PIT_Enable(AnalogThreadData[analogNb].channelNb + 1, FALSE);
-        AnalogThreadData[analogNb].timing = 0;
+        AnalogThreadData[analogNb].timing_status = 0;
       }
-    } // End for
+    }
 
 
     bool hasAlarming = FALSE;
@@ -299,7 +365,7 @@ void CycleThread(void* pData)
     // Check each analog channel status
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
     {
-      if (AnalogThreadData[analogNb].voltage_status_code > 0)
+      if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
         hasAlarming = TRUE;
 
       if (AnalogThreadData[analogNb].tapping_status_code == 1)
@@ -347,7 +413,11 @@ void CycleThread(void* pData)
   }
 }
 
-/*! @brief Samples a value on an ADC channel & start timer
+
+
+
+
+/*! @brief Samples a value on an ADC channel
  *
  */
 void AnalogThread(void* pData)
@@ -365,16 +435,26 @@ void AnalogThread(void* pData)
     // Get analog sample
     Analog_Get(analogData->channelNb, &analogInputValue);
 
-    // For debugging - output ch0 samples to ch3
-    if (analogData->channelNb == 0)
-      Analog_Put(3, analogInputValue);
-
     // Real voltage = analogInputValue / 3276.7 V
     // 1e-2 V
     realVoltage = analogInputValue * 305 / 1e4;
 
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
+
+    analogData->current_timing_count ++;
+
+    // Find zero crossing
+    if (analogData->channelNb == 0)
+    {
+      ///
+      Analog_Put(3, analogInputValue);
+
+      Algorithm_Frequency(realVoltage);
+
+      //Packet_Put(0xff, 0, analogData->frequency, analogData->frequency >> 8);
+      //analogData->last_sample = realVoltage;
+    }
 
   }
 }

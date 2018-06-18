@@ -31,10 +31,16 @@ typedef struct AnalogThreadData
   uint32_t voltage_squares[16];
   uint8_t sample_count; // 0-15
   uint16_t rms;
-  uint8_t voltage_status_code; // 0 - In boundary; 1 - Too high; 2 - Too low
   uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
-  uint16_t timing;
+  uint8_t timing_status; // 0 - Not timing; 1 - Definite timing; 2 - Inverse timing
+  uint16_t target_timing_count;
+  uint16_t current_timing_count;
   uint16_t frequency; // Hz*10
+  int16_t last_sample;
+  uint8_t frequency_tracking_sample_count;
+  uint8_t crossingNb; // 111
+  float offset1;
+  float offset2;
 } TAnalogThreadData;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
@@ -53,6 +59,6 @@ OS_ECB* CycleSem;
  */
 void Algorithm_RMS(uint8_t ch, int16_t realVoltage);
 
-
+void Algorithm_Frequency(int16_t realVoltage);
 
 #endif
