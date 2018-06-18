@@ -305,6 +305,9 @@ void CycleThread(void* pData)
     {
       if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
       {
+        // Count Time
+        AnalogThreadData[analogNb].current_timing_count ++;
+        
         if (*TimingMode == 1) // Definite mode
         {
           if (AnalogThreadData[analogNb].timing_status != 1) // Not timing or is inverse timing
@@ -337,13 +340,16 @@ void CycleThread(void* pData)
           {
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
               Tap(analogNb);
-
-            //targetTimingCount = (double)(AnalogThreadData[analogNb].target_timing_count - AnalogThreadData[analogNb].current_timing_count) / AnalogThreadData[analogNb].target_timing_count * targetTimingCount;
-            //targetTimingCount = (uint16_t)(0.5F * targetTimingCount);
-            //AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
-            AnalogThreadData[analogNb].current_timing_count = 0;
-            ///
-            Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+                        
+            if (targetTimingCount != AnalogThreadData[analogNb].target_timing_count) // Target count changed due to RMS deviation change
+            {
+              // New target count according to remaining rate
+              targetTimingCount *= 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count;
+              AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
+              AnalogThreadData[analogNb].current_timing_count = 0;
+              ///
+              Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+            }
 
           }
         }
@@ -442,8 +448,6 @@ void AnalogThread(void* pData)
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
 
-    analogData->current_timing_count ++;
-
     // Find zero crossing
     if (analogData->channelNb == 0)
     {
@@ -451,9 +455,8 @@ void AnalogThread(void* pData)
       Analog_Put(3, analogInputValue);
 
       Algorithm_Frequency(realVoltage);
-
-      //Packet_Put(0xff, 0, analogData->frequency, analogData->frequency >> 8);
-      //analogData->last_sample = realVoltage;
+      
+      analogData->last_sample = realVoltage;
     }
 
   }
