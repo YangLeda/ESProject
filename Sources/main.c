@@ -64,6 +64,7 @@ OS_THREAD_STACK(PIT0ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PIT1ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PIT2ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PIT3ThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(CycleThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
@@ -132,6 +133,9 @@ static void InitModulesThread(void* pData)
   bool flashInitResult = Flash_Init();
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
+
+  // Initialize cycle semaphore
+  CycleSem = OS_SemaphoreCreate(0);
 
   // PIT0 - period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
   PIT_Set(0, 125e4, FALSE);
@@ -294,6 +298,20 @@ void PIT3Thread(void* pData)
   }
 }
 
+/*! @brief Each cycle.
+ *
+ */
+void CycleThread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(CycleSem, 0);
+
+    Packet_Put(0x04, 0, 0, 0);
+
+  }
+}
+
 /*! @brief Samples a value on an ADC channel & start timer
  *
  */
@@ -401,12 +419,14 @@ int main(void)
   error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
   // Create PIT1 thread
   error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 7);
-  // Create PIT0 thread
+  // Create PIT2 thread
   error = OS_ThreadCreate(PIT2Thread, NULL, &PIT2ThreadStack[THREAD_STACK_SIZE-1], 8);
-  // Create PIT1 thread
+  // Create PIT3 thread
   error = OS_ThreadCreate(PIT3Thread, NULL, &PIT3ThreadStack[THREAD_STACK_SIZE-1], 9);
+  // Create Cycle thread
+  error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 10);
   // Create Packet thread
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 10);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 11);
 
   // Start multithreading - never returns!
   OS_Start();

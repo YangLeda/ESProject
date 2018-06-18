@@ -39,6 +39,9 @@ typedef struct AnalogThreadData
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 
+// Semaphores of cycle
+OS_ECB* CycleSem;
+
 /*! @brief Sets up the PIT before first use.
  *
  *  Enables the PIT and freezes the timer when debugging.

@@ -33,6 +33,9 @@ void Algorithm_RMS(uint8_t ch, int16_t realVoltage)
     AnalogThreadData[ch].rms = (AnalogThreadData[ch].rms + (sumvoltageSquares >> 4) / AnalogThreadData[ch].rms) >> 1;
 
     AnalogThreadData[ch].sample_count = 0;
+
+    // Signal cycle semaphore
+    OS_SemaphoreSignal(CycleSem);
   }
 
 }
