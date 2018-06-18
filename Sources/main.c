@@ -325,7 +325,8 @@ void CycleThread(void* pData)
             deviation = AnalogThreadData[analogNb].rms - 200;
 
           uint16_t targetTimingCount; // Target number of counts before time out
-          targetTimingCount = 16 * 25 * AnalogThreadData[analogNb].frequency / deviation;
+          ///////////////////////////frequency hardcoded
+          targetTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
 
 
           if (AnalogThreadData[analogNb].timing_status != 2) // Not timing or is definite timing, start inverse timing
