@@ -41,6 +41,7 @@ typedef struct AnalogThreadData
   uint8_t crossingNb; // 111
   float offset1;
   float offset2;
+  uint8_t last_deviation_count;
 } TAnalogThreadData;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
