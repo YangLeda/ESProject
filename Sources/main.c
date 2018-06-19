@@ -328,7 +328,7 @@ void CycleThread(void* pData)
             deviation = AnalogThreadData[analogNb].rms - 200;
 
           uint8_t deviationTimingCount; // Target number of counts before time out
-          ///////////////////////////frequency hardcoded
+          ///////////////////////////frequency hardcoded. Use PITo time in nanosecond?
           deviationTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
 
 
