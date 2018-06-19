@@ -64,7 +64,19 @@ void Algorithm_Frequency(int16_t realVoltage)
         // In nano second
         uint32_t new_period = AnalogThreadData[0].frequency_tracking_sample_count * PERIOD_OF_PIT0 + AnalogThreadData[0].left_fix_time - AnalogThreadData[0].right_fix_time
         uint16_t frequency = 1e9 / new_period ; // Calculate frequency
-        AnalogThreadData[0].frequency = frequency;
+        
+        // Update frequency
+        if (AnalogThreadData[0].rms >= 150)
+        {
+          AnalogThreadData[0].frequency = frequency;
+          // set PIT0
+        }
+        else // Below 1.5V then 50Hz assumed
+        {
+          AnalogThreadData[0].frequency = 500;
+          // set PIT0
+        }
+   
         AnalogThreadData[0].zero_crossing_count = 0;
         break;
     } // End switch
