@@ -327,15 +327,15 @@ void CycleThread(void* pData)
           else
             deviation = AnalogThreadData[analogNb].rms - 200;
 
-          uint16_t targetTimingCount; // Target number of counts before time out
+          uint8_t deviationTimingCount; // Target number of counts before time out
           ///////////////////////////frequency hardcoded
-          targetTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
+          deviationTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
 
 
           if (AnalogThreadData[analogNb].timing_status != 2) // Not timing or is definite timing, start inverse timing
           {
-            AnalogThreadData[analogNb].last_deviation_count = targetTimingCount;
-            AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
+            AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
+            AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
             AnalogThreadData[analogNb].current_timing_count = 0;
             AnalogThreadData[analogNb].timing_status = 2;
             ///
@@ -346,13 +346,14 @@ void CycleThread(void* pData)
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
               Tap(analogNb);
                         
-            if (AnalogThreadData[analogNb].last_deviation_count != targetTimingCount) // RMS deviation count fluctuated
+            if (AnalogThreadData[analogNb].last_deviation_count != deviationTimingCount) // RMS deviation count fluctuated
             {
-              AnalogThreadData[analogNb].last_deviation_count = targetTimingCount;
+              AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
               // New target count according to remaining rate
+              uint8_t newTargetTimingCount; 
               //targetTimingCount *= 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count;
-              targetTimingCount = AnalogThreadData[analogNb].current_timing_count + （1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count）* targetTimingCount;
-              AnalogThreadData[analogNb].target_timing_count = targetTimingCount;
+              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + （1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count）* deviationTimingCount;
+              AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
               //AnalogThreadData[analogNb].current_timing_count = 0;
               ///
               Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
