@@ -104,8 +104,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .last_sample = 0,
     .frequency_tracking_sample_count = 0,
     .crossingNb = 0,
-    .offset1 = 0,
-    .offset1 = 0,
+    .left_fix_time = 0,
+    .right_fix_time = 0,
     .last_deviation_count = 0
   },
   {
@@ -122,8 +122,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .last_sample = 0,
     .frequency_tracking_sample_count = 0,
     .crossingNb = 0,
-    .offset1 = 0,
-    .offset1 = 0,
+    .left_fix_time = 0,
+    .right_fix_time = 0,
     .last_deviation_count = 0
   },
   {
@@ -140,8 +140,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .last_sample = 0,
     .frequency_tracking_sample_count = 0,
     .crossingNb = 0,
-    .offset1 = 0,
-    .offset1 = 0,
+    .left_fix_time = 0,
+    .right_fix_time = 0,
     .last_deviation_count = 0
   }
 };
