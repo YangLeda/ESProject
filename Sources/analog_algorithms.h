@@ -39,8 +39,8 @@ typedef struct AnalogThreadData
   int16_t last_sample;
   uint8_t frequency_tracking_sample_count;
   uint8_t zero_crossing_count;
-  uint32_t left_fix_time = 0; // In nano second
-  uint32_t right_fix_time = 0; // In nano second
+  uint32_t left_fix_time; // In nano second
+  uint32_t right_fix_time; // In nano second
   uint8_t last_deviation_count;
 } TAnalogThreadData;
 

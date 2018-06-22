@@ -60,10 +60,10 @@ void Algorithm_Frequency(int16_t realVoltage)
       // Second zero crossing
       case 1:
         // Calculate right time offset
-        AnalogThreadData[0].right_fix_time = AnalogThreadData[0].last_sample * PERIOD_OF_PIT0 / (AnalogThreadData[0].last_sample - realVoltage);
+        AnalogThreadData[0].right_fix_time = realVoltage * PERIOD_OF_PIT0 / (realVoltage - AnalogThreadData[0].last_sample);
         // In nano second
-        uint32_t new_period = AnalogThreadData[0].frequency_tracking_sample_count * PERIOD_OF_PIT0 + AnalogThreadData[0].left_fix_time - AnalogThreadData[0].right_fix_time
-        uint16_t frequency = 1e9 / new_period ; // Calculate frequency
+        uint32_t new_period = AnalogThreadData[0].frequency_tracking_sample_count * PERIOD_OF_PIT0 + AnalogThreadData[0].left_fix_time - AnalogThreadData[0].right_fix_time;
+        uint16_t frequency = 1e10 / new_period; // Calculate frequency
         
         // Update frequency
         if (AnalogThreadData[0].rms >= 150)

@@ -352,7 +352,7 @@ void CycleThread(void* pData)
               // New target count according to remaining rate
               uint8_t newTargetTimingCount; 
               //targetTimingCount *= 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count;
-              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + （1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count）* deviationTimingCount;
+              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count * deviationTimingCount;
               AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
               //AnalogThreadData[analogNb].current_timing_count = 0;
               ///
