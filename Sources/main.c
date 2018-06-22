@@ -55,8 +55,7 @@
 #define ANALOG_ALARM_CHANNEL 2
 
 #define ANALOG_5V 16384
-// Initial sample period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
-#define INITIAL_SAMPLE_PERIOD 125e4
+
 #define INITIAL_TIMING_MODE 1
 #define TIME_DEFINITE 1e9
 
@@ -106,7 +105,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .zero_crossing_count = 0,
     .left_fix_time = 0,
     .right_fix_time = 0,
-    .last_deviation_count = 0
+    .last_deviation_count = 0,
+    .sample_period = INITIAL_SAMPLE_PERIOD
   },
   {
     .semaphore = NULL,
@@ -124,7 +124,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .zero_crossing_count = 0,
     .left_fix_time = 0,
     .right_fix_time = 0,
-    .last_deviation_count = 0
+    .last_deviation_count = 0,
+    .sample_period = INITIAL_SAMPLE_PERIOD
   },
   {
     .semaphore = NULL,
@@ -142,7 +143,8 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
     .zero_crossing_count = 0,
     .left_fix_time = 0,
     .right_fix_time = 0,
-    .last_deviation_count = 0
+    .last_deviation_count = 0,
+    .sample_period = INITIAL_SAMPLE_PERIOD
   }
 };
 
@@ -424,6 +426,8 @@ void CycleThread(void* pData)
       Analog_Put(ANALOG_LOWER_CHANNEL, 0);
     }
 
+    // set PIT0////////////////////////////////////
+    //PIT_Set(0, AnalogThreadData[0].sample_period, TRUE);
   }
 }
 

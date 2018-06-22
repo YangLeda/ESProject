@@ -17,8 +17,11 @@
 #include "MK70F12.h"
 #include "OS.h"
 
+
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 3
+// Initial sample period in nanosecond is 1 / 50 / 16 * 1000000000 = 125e4
+#define INITIAL_SAMPLE_PERIOD 125e4
 
 
 /*! @brief Data structure used to pass Analog configuration to a user thread
@@ -42,6 +45,7 @@ typedef struct AnalogThreadData
   uint32_t left_fix_time; // In nano second
   uint32_t right_fix_time; // In nano second
   uint8_t last_deviation_count;
+  uint32_t sample_period;
 } TAnalogThreadData;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
