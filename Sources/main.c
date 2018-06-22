@@ -44,11 +44,10 @@
 #include "analog_algorithms.h"
 
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
-#define THREAD_STACK_SIZE 1000
+#define THREAD_STACK_SIZE 100
 // Baud rate
 #define BAUD 115200
-// Tower number
-#define TOWER_NUMBER 2324
+
 
 #define ANALOG_RAISE_CHANNEL 0
 #define ANALOG_LOWER_CHANNEL 1
@@ -323,15 +322,19 @@ void CycleThread(void* pData)
         else // Inverse mode
         {
           uint16_t deviation; // Deviation of RMS
-          if (AnalogThreadData[analogNb].rms < 200)
-            deviation = 200 - AnalogThreadData[analogNb].rms;
+          if (AnalogThreadData[analogNb].rms < 250)
+            deviation = 250 - AnalogThreadData[analogNb].rms;
           else
-            deviation = AnalogThreadData[analogNb].rms - 200;
+            deviation = AnalogThreadData[analogNb].rms - 250;
+
+          Packet_Put(0x05, 1, deviation, deviation >> 8);
 
           uint8_t deviationTimingCount; // Target number of counts before time out
           ///////////////////////////frequency hardcoded. Use PITo time in nanosecond?
-          //deviationTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
-          deviationTimingCount = 2e4 / deviation;
+          //deviationTimingCount = 0.5V / deviation(V) * 5s / period(s)
+          deviationTimingCount = 12500 / deviation;
+
+          Packet_Put(0x05, 2, deviationTimingCount, 0);
 
           if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
           {
@@ -366,6 +369,7 @@ void CycleThread(void* pData)
               //AnalogThreadData[analogNb].current_timing_count = 0;
               ///
               Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+
 
             }
 
@@ -436,6 +440,7 @@ void CycleThread(void* pData)
 
     // set PIT0////////////////////////////////////
     //PIT_Set(0, AnalogThreadData[0].sample_period, TRUE);
+    PIT_Set(0, 125e4, TRUE);
   }
 }
 
