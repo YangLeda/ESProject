@@ -55,7 +55,7 @@
 
 #define ANALOG_5V 16384
 
-#define INITIAL_TIMING_MODE 2
+#define INITIAL_TIMING_MODE 1
 #define TIME_DEFINITE 1e9
 
 
@@ -334,7 +334,7 @@ void CycleThread(void* pData)
           //deviationTimingCount = 0.5V / deviation(V) * 5s / period(s)
           deviationTimingCount = 12500 / deviation;
 
-          Packet_Put(0x05, 2, deviationTimingCount, 0);
+          //Packet_Put(0x05, 2, deviationTimingCount, 0);
 
           if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
           {
@@ -349,7 +349,7 @@ void CycleThread(void* pData)
           {
             // Count Time
             AnalogThreadData[analogNb].current_timing_count ++;
-            Packet_Put(0x00, 0, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
+            //Packet_Put(0x00, 0, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
 
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
             {
@@ -440,7 +440,7 @@ void CycleThread(void* pData)
 
     // set PIT0////////////////////////////////////
     //PIT_Set(0, AnalogThreadData[0].sample_period, TRUE);
-    PIT_Set(0, 125e4, TRUE);
+    //PIT_Set(0, 125e4, TRUE);
   }
 }
 

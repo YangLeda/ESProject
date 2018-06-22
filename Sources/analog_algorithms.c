@@ -72,6 +72,7 @@ void Algorithm_Frequency(int16_t realVoltage)
         AnalogThreadData[0].frequency = 500;
         AnalogThreadData[0].sample_period = INITIAL_SAMPLE_PERIOD;
       }
+      //PIT_Set(0, AnalogThreadData[0].sample_period, TRUE); ///
     }
   }
 

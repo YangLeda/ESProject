@@ -16,7 +16,7 @@
 #include "PE_Types.h"
 #include "MK70F12.h"
 #include "OS.h"
-
+#include "PIT.h" ///
 
 // Number of analog channels
 #define NB_ANALOG_CHANNELS 3
