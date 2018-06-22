@@ -56,7 +56,7 @@
 
 #define ANALOG_5V 16384
 
-#define INITIAL_TIMING_MODE 1
+#define INITIAL_TIMING_MODE 2
 #define TIME_DEFINITE 1e9
 
 
@@ -310,8 +310,7 @@ void CycleThread(void* pData)
     {
       if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
       {
-        // Count Time
-        AnalogThreadData[analogNb].current_timing_count ++;
+
         
         if (*TimingMode == 1) // Definite mode
         {
@@ -331,10 +330,10 @@ void CycleThread(void* pData)
 
           uint8_t deviationTimingCount; // Target number of counts before time out
           ///////////////////////////frequency hardcoded. Use PITo time in nanosecond?
-          deviationTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
+          //deviationTimingCount = 16 * 25 * AnalogThreadData[2].frequency / deviation;
+          deviationTimingCount = 2e4 / deviation;
 
-
-          if (AnalogThreadData[analogNb].timing_status != 2) // Not timing or is definite timing, start inverse timing
+          if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
           {
             AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
             AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
@@ -343,10 +342,18 @@ void CycleThread(void* pData)
             ///
             Packet_Put(0x01, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
           }
-          else // Already inverse timing
+          else if (AnalogThreadData[analogNb].timing_status == 2)// Already inverse timing
           {
+            // Count Time
+            AnalogThreadData[analogNb].current_timing_count ++;
+            Packet_Put(0x00, 0, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
+
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
+            {
+              // Already tap, stop timing count
+              AnalogThreadData[analogNb].timing_status = 3;
               Tap(analogNb);
+            }
                         
             if (AnalogThreadData[analogNb].last_deviation_count != deviationTimingCount) // RMS deviation count fluctuated
             {
@@ -354,11 +361,12 @@ void CycleThread(void* pData)
               // New target count according to remaining rate
               uint8_t newTargetTimingCount; 
               //targetTimingCount *= 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count;
-              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count * deviationTimingCount;
+              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + (1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count) * deviationTimingCount;
               AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
               //AnalogThreadData[analogNb].current_timing_count = 0;
               ///
               Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+
             }
 
           }
