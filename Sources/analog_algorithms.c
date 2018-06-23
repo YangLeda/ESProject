@@ -43,22 +43,22 @@ void Algorithm_RMS(uint8_t ch, int16_t realVoltage)
 void Algorithm_Frequency(int16_t realVoltage)
 {
   // Zero crossing - low to high
-  if (AnalogThreadData[0].last_sample <= 0 && realVoltage >= 0)
+  if (AnalogThreadData[0].last_sample < 0 && realVoltage > 0)
   {
     if (AnalogThreadData[0].zero_crossing_count == 0) // First zero crossing
     {
       // Calculate left time offset
-      AnalogThreadData[0].left_fix_time = realVoltage * 125e4 / (realVoltage - AnalogThreadData[0].last_sample);
+      AnalogThreadData[0].left_fix_time = realVoltage * AnalogThreadData[0].sample_period / (realVoltage - AnalogThreadData[0].last_sample);
       AnalogThreadData[0].frequency_tracking_sample_count = 0;
       AnalogThreadData[0].zero_crossing_count = 1;
     }
     else if (AnalogThreadData[0].zero_crossing_count == 1) // Second zero crossing
     {
       // Calculate right time offset
-      AnalogThreadData[0].right_fix_time = realVoltage * 125e4 / (realVoltage - AnalogThreadData[0].last_sample);
+      AnalogThreadData[0].right_fix_time = realVoltage * AnalogThreadData[0].sample_period / (realVoltage - AnalogThreadData[0].last_sample);
       AnalogThreadData[0].zero_crossing_count = 0;
       // In nano second
-      uint64_t new_cycle_period = AnalogThreadData[0].frequency_tracking_sample_count * 125e4 + AnalogThreadData[0].left_fix_time - AnalogThreadData[0].right_fix_time;
+      uint64_t new_cycle_period = AnalogThreadData[0].frequency_tracking_sample_count * AnalogThreadData[0].sample_period + AnalogThreadData[0].left_fix_time - AnalogThreadData[0].right_fix_time;
       uint16_t new_frequency = 1e10 / new_cycle_period; // Calculate frequency
 
       // Update frequency
@@ -72,7 +72,9 @@ void Algorithm_Frequency(int16_t realVoltage)
         AnalogThreadData[0].frequency = 500;
         AnalogThreadData[0].sample_period = INITIAL_SAMPLE_PERIOD;
       }
+
       PIT_Set(0, AnalogThreadData[0].sample_period, FALSE); ///
+
     }
   }
 
