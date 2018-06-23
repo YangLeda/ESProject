@@ -56,7 +56,7 @@
 #define ANALOG_5V 16384
 
 #define INITIAL_TIMING_MODE 1
-#define TIME_DEFINITE 1e9
+#define TIME_DEFINITE 5e9
 
 
 // Thread stacks
@@ -64,8 +64,6 @@ OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
 OS_THREAD_STACK(PIT0ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PIT1ThreadStack, THREAD_STACK_SIZE);
-OS_THREAD_STACK(PIT2ThreadStack, THREAD_STACK_SIZE);
-OS_THREAD_STACK(PIT3ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(CycleThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
@@ -245,55 +243,6 @@ void PIT1Thread(void* pData)
   }
 }
 
-/*! @brief Analog channel 1 alarm time out.
- *
- */
-void PIT2Thread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(PIT2Sem, 0);
-
-    // Disable PIT
-    PIT_Enable(2, FALSE);
-
-    if (AnalogThreadData[1].rms > 300)
-      AnalogThreadData[1].tapping_status_code = 1;
-    else if (AnalogThreadData[1].rms < 200)
-      AnalogThreadData[1].tapping_status_code = 2;
-
-    // Update event number to flash
-    if (AnalogThreadData[1].tapping_status_code == 1)
-      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    else if (AnalogThreadData[1].tapping_status_code == 2)
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
-  }
-}
-
-/*! @brief Analog channel 2 alarm time out.
- *
- */
-void PIT3Thread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(PIT3Sem, 0);
-
-    // Disable PIT
-    PIT_Enable(3, FALSE);
-
-    if (AnalogThreadData[2].rms > 300)
-      AnalogThreadData[2].tapping_status_code = 1;
-    else if (AnalogThreadData[2].rms < 200)
-      AnalogThreadData[2].tapping_status_code = 2;
-
-    // Update event number to flash
-    if (AnalogThreadData[2].tapping_status_code == 1)
-      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    else if (AnalogThreadData[2].tapping_status_code == 2)
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
-  }
-}
 
 /*! @brief Each cycle. Check each channel's RMS. Set and update 3 timers. Control 3 outputs.
  *
@@ -309,14 +258,27 @@ void CycleThread(void* pData)
     {
       if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
       {
-
-        
         if (*TimingMode == 1) // Definite mode
         {
-          if (AnalogThreadData[analogNb].timing_status != 1) // Not timing or is inverse timing
+          if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 2) // Not timing or is inverse timing
           {
-            PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+            //PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
+            AnalogThreadData[analogNb].target_timing_count = (uint16_t)(TIME_DEFINITE / AnalogThreadData[analogNb].sample_period) >> 4;
+            AnalogThreadData[analogNb].current_timing_count = 0;
             AnalogThreadData[analogNb].timing_status = 1;
+            Packet_Put(0x01, 1, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
+          }
+          else if (AnalogThreadData[analogNb].timing_status == 1)// Already definite timing
+          {
+            // Count Time
+            Packet_Put(0x01, 2, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
+            AnalogThreadData[analogNb].current_timing_count ++;
+            if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
+            {
+              // Already tap, stop timing count
+              AnalogThreadData[analogNb].timing_status = 3;
+              Tap(analogNb);
+            }
           }
         }
         else // Inverse mode
@@ -327,14 +289,9 @@ void CycleThread(void* pData)
           else
             deviation = AnalogThreadData[analogNb].rms - 250;
 
-          Packet_Put(0x05, 1, deviation, deviation >> 8);
-
           uint8_t deviationTimingCount; // Target number of counts before time out
-          ///////////////////////////frequency hardcoded. Use PITo time in nanosecond?
-          //deviationTimingCount = 0.5V / deviation(V) * 5s / period(s)
-          deviationTimingCount = 12500 / deviation;
 
-          //Packet_Put(0x05, 2, deviationTimingCount, 0);
+          deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
 
           if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
           {
@@ -342,14 +299,11 @@ void CycleThread(void* pData)
             AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
             AnalogThreadData[analogNb].current_timing_count = 0;
             AnalogThreadData[analogNb].timing_status = 2;
-            ///
-            Packet_Put(0x01, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
           }
           else if (AnalogThreadData[analogNb].timing_status == 2)// Already inverse timing
           {
             // Count Time
             AnalogThreadData[analogNb].current_timing_count ++;
-            //Packet_Put(0x00, 0, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
 
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
             {
@@ -363,14 +317,8 @@ void CycleThread(void* pData)
               AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
               // New target count according to remaining rate
               uint8_t newTargetTimingCount; 
-              //targetTimingCount *= 1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count;
               newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + (1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count) * deviationTimingCount;
               AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
-              //AnalogThreadData[analogNb].current_timing_count = 0;
-              ///
-              Packet_Put(0x02, 0, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
-
-
             }
 
           }
@@ -437,10 +385,6 @@ void CycleThread(void* pData)
       LEDs_Off(LED_GREEN);
       Analog_Put(ANALOG_LOWER_CHANNEL, 0);
     }
-
-    // set PIT0////////////////////////////////////
-    //PIT_Set(0, AnalogThreadData[0].sample_period, TRUE);
-    //PIT_Set(0, 125e4, TRUE);
   }
 }
 
@@ -531,10 +475,6 @@ int main(void)
   error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 7);
   // Create PIT1 thread
   error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 8);
-  // Create PIT2 thread
-  error = OS_ThreadCreate(PIT2Thread, NULL, &PIT2ThreadStack[THREAD_STACK_SIZE-1], 9);
-  // Create PIT3 thread
-  error = OS_ThreadCreate(PIT3Thread, NULL, &PIT3ThreadStack[THREAD_STACK_SIZE-1], 10);
   // Create Packet thread
   error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 11);
 
