@@ -223,7 +223,7 @@ static bool Handle_Spectrum_Packet(void)
 {
   if (Packet_Parameter1 >= 0 && Packet_Parameter1 <= 7)
   {
-    Packet_Put(0x19, Packet_Parameter1, 0, 0);
+    OS_SemaphoreSignal(SpectrumSem);
     return TRUE;
   }
   return FALSE;

@@ -16,7 +16,11 @@
 #include "PE_Types.h"
 #include "MK70F12.h"
 #include "OS.h"
-#include "PIT.h" ///
+#include "PIT.h"
+
+#include "complex.h"
+#include "math.h"
+#define M_PI 3.14159265358979323846264338327950288
 
 
 
@@ -34,6 +38,7 @@ typedef struct AnalogThreadData
   OS_ECB* semaphore;
   uint8_t channelNb;
   uint32_t voltage_squares[16];
+  double complex voltage[16];
   uint8_t sample_count; // 0-15
   uint16_t rms;
   uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
@@ -67,5 +72,7 @@ OS_ECB* CycleSem;
 void Algorithm_RMS(uint8_t ch, int16_t realVoltage);
 
 void Algorithm_Frequency(int16_t realVoltage);
+
+//void iterative_cooley_tukey(double complex *X);
 
 #endif

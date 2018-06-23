@@ -43,6 +43,8 @@
 // Algorithms
 #include "analog_algorithms.h"
 
+
+
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
 #define THREAD_STACK_SIZE 100
 // Baud rate
@@ -67,6 +69,7 @@ OS_THREAD_STACK(CycleThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(PacketThreadStack, THREAD_STACK_SIZE);
+OS_THREAD_STACK(SpectrumThreadStack, THREAD_STACK_SIZE);
 
 // Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
@@ -79,8 +82,57 @@ uint16union_t* volatile NumOfLower;
 // 1 - definite timing mode; 2 - inverse timing mode
 uint8_t* volatile TimingMode;
 
+double complex x[16] = {196,66,-74,-203,-294,-335,-319,-260,-167,-50,71,185,273,327,337,291};/////
+double y[16];
+
+
+
 
 void UpadateAnalogOutput(void);
+
+
+
+void bit_reverse(double complex *X) {
+    for (uint8_t i = 0; i < 16; ++i) {
+      uint8_t n = i;
+      uint8_t a = i;
+      uint8_t count = 3;
+
+        n >>= 1;
+        while (n > 0) {
+            a = (a << 1) | (n & 1);
+            count--;
+            n >>= 1;
+        }
+        n = (a << count) & ((1 << 4) - 1);
+
+        if (n > i) {
+            double complex tmp = X[i];
+            X[i] = X[n];
+            X[n] = tmp;
+        }
+    }
+}
+
+void iterative_cooley_tukey(double complex *X) {
+    bit_reverse(X);
+
+    for (uint8_t i = 0; i < 4; i ++) {
+      uint8_t stride = pow(2, i);
+      double complex w = cexp(-2.0 * I * M_PI / stride);
+      for (uint8_t j = 0; j < 16; j += stride) {
+        double complex v = 1.0;
+        for (uint8_t k = 0; k < stride / 2; ++k) {
+            X[k + j + stride / 2] = X[k + j] - v * X[k + j + stride / 2];
+            X[k + j] -= (X[k + j + stride / 2] - X[k + j]);
+            v *= w;
+        }
+      }
+    }
+
+}
+
+
 
 
 
@@ -92,6 +144,7 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 0,
+    .voltage = {250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250}, // Assume 2.5V
     .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
     .sample_count = 15,
     .rms = 250,
@@ -176,6 +229,7 @@ static void InitModulesThread(void* pData)
 
   // Initialize cycle semaphore
   CycleSem = OS_SemaphoreCreate(0);
+  SpectrumSem = OS_SemaphoreCreate(0);
 
   // Sampling PIT timers - PIT0 for analog channel 0, PIT1 for analog channel 1 & 2
   PIT_Set(INITIAL_SAMPLE_PERIOD, FALSE);
@@ -196,6 +250,7 @@ static void InitModulesThread(void* pData)
 
   // Send startup packets
   Packet_Put(0x04, 0, 0, 0);
+
 
   // We only do this once - therefore delete this thread
   OS_ThreadDelete(OS_PRIORITY_SELF);
@@ -385,10 +440,18 @@ void AnalogThread(void* pData)
     Analog_Get(analogData->channelNb, &analogInputValue);
 
     // Real voltage = analogInputValue / 3276.7 (Result unit: 10^-2V)
-    realVoltage = analogInputValue * 305 / 1e4;
+    realVoltage = (int16_t) analogInputValue * 305 / 1e4;
+
+
 
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
+
+    if (analogData->channelNb == 0)
+    {
+      //Packet_Put(0x01, 0, analogInputValue, analogInputValue >> 8);
+      //Packet_Put(0x02, 0, realVoltage, realVoltage >> 8);
+    }
 
     // Find zero crossing
     if (analogData->channelNb == 0)
@@ -418,6 +481,28 @@ void PacketThread(void* data)
   }
 }
 
+
+/*! @brief
+ *
+ *  @param pData is not used but is required by the OS to create a thread.
+ */
+void SpectrumThread(void* data)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(SpectrumSem, 0);
+
+    Packet_Put(0xff, 0, 0, 0);
+
+    iterative_cooley_tukey(AnalogThreadData[0].voltage);
+    for (uint8_t i = 0; i < 16; ++i) {
+      y[i] = cabs(x[i]);
+    }
+
+    Packet_Put(0x19, 0, 0, 0);
+  }
+}
+
 /*lint -save  -e970 Disable MISRA rule (6.3) checking. */
 int main(void)
 /*lint -restore Enable MISRA rule (6.3) checking. */
@@ -429,6 +514,8 @@ int main(void)
 
   // Initialize the RTOS
   OS_Init(CPU_CORE_CLK_HZ, TRUE);
+
+
 
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
@@ -448,6 +535,8 @@ int main(void)
   error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 7);
   // Create Packet thread
   error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 8);
+  // Create Packet thread
+  error = OS_ThreadCreate(SpectrumThread, NULL, &SpectrumThreadStack[THREAD_STACK_SIZE-1], 9);
 
   // Start multithreading - never returns!
   OS_Start();

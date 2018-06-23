@@ -14,8 +14,11 @@
 void Algorithm_RMS(uint8_t ch, int16_t realVoltage)
 {
   // Put new voltage square into array
+  AnalogThreadData[ch].voltage[AnalogThreadData[ch].sample_count] = realVoltage;
   AnalogThreadData[ch].voltage_squares[AnalogThreadData[ch].sample_count] = (uint32_t) realVoltage * realVoltage;
   AnalogThreadData[ch].sample_count ++;
+
+
 
   // Calculate and update new rms each cycle
   if (AnalogThreadData[ch].sample_count > 15)
@@ -36,7 +39,11 @@ void Algorithm_RMS(uint8_t ch, int16_t realVoltage)
 
     // Signal cycle semaphore when 16 samples are collected on ch0
     if (ch == 0)
+    {
+
       OS_SemaphoreSignal(CycleSem);
+    }
+
   }
 }
 
@@ -80,3 +87,7 @@ void Algorithm_Frequency(int16_t realVoltage)
 
   AnalogThreadData[0].frequency_tracking_sample_count ++;
 }
+
+
+
+

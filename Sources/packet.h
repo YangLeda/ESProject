@@ -74,6 +74,9 @@ extern uint8_t* volatile TimingMode;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 
+// Semaphores of PIT
+OS_ECB* SpectrumSem;
+
 
 /*! @brief Initializes the packets by calling the initialization routines of the supporting software modules.
  *
