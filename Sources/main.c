@@ -55,15 +55,14 @@
 
 #define ANALOG_5V 16384
 
-#define INITIAL_TIMING_MODE 1
-#define TIME_DEFINITE 5e9
+#define INITIAL_TIMING_MODE 2
+#define TIME_DEFINITE 1e9
 
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
 static uint32_t AnalogThreadStacks[NB_ANALOG_CHANNELS][THREAD_STACK_SIZE] __attribute__ ((aligned(0x08)));
 OS_THREAD_STACK(PIT0ThreadStack, THREAD_STACK_SIZE);
-OS_THREAD_STACK(PIT1ThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(CycleThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTReceiveThreadStack, THREAD_STACK_SIZE);
 OS_THREAD_STACK(UARTTransmitThreadStack, THREAD_STACK_SIZE);
@@ -79,6 +78,10 @@ uint16union_t* volatile NumOfRaise;
 uint16union_t* volatile NumOfLower;
 // 1 - definite timing mode; 2 - inverse timing mode
 uint8_t* volatile TimingMode;
+
+
+void UpadateAnalogOutput(void);
+
 
 
 /*! @brief Analog thread configuration data
@@ -147,7 +150,6 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 
 void Tap(uint8_t channelNb)
 {
-
   if (AnalogThreadData[channelNb].rms > 300)
     AnalogThreadData[channelNb].tapping_status_code = 1;
   else if (AnalogThreadData[channelNb].rms < 200)
@@ -175,9 +177,10 @@ static void InitModulesThread(void* pData)
   // Initialize cycle semaphore
   CycleSem = OS_SemaphoreCreate(0);
 
-  // PIT0
-  PIT_Set(0, INITIAL_SAMPLE_PERIOD, FALSE);
-  PIT_Enable(0, TRUE);
+  // Sampling PIT timers - PIT0 for analog channel 0, PIT1 for analog channel 1 & 2
+  PIT_Set(INITIAL_SAMPLE_PERIOD, FALSE);
+  PIT_Enable(TRUE);
+
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
@@ -210,36 +213,7 @@ void PIT0Thread(void* pData)
 
     // Signal each analog channel to take a sample
     for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    {
       (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
-    }
-
-  }
-}
-
-
-/*! @brief Analog channel 0 alarm time out.
- *
- */
-void PIT1Thread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(PIT1Sem, 0);
-
-    // Disable PIT
-    PIT_Enable(1, FALSE);
-
-    if (AnalogThreadData[0].rms > 300)
-      AnalogThreadData[0].tapping_status_code = 1;
-    else if (AnalogThreadData[0].rms < 200)
-      AnalogThreadData[0].tapping_status_code = 2;
-
-    // Update event number to flash
-    if (AnalogThreadData[0].tapping_status_code == 1)
-      Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-    else if (AnalogThreadData[0].tapping_status_code == 2)
-      Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
   }
 }
 
@@ -262,16 +236,13 @@ void CycleThread(void* pData)
         {
           if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 2) // Not timing or is inverse timing
           {
-            //PIT_Set(AnalogThreadData[analogNb].channelNb + 1, TIME_DEFINITE, TRUE);
             AnalogThreadData[analogNb].target_timing_count = (uint16_t)(TIME_DEFINITE / AnalogThreadData[analogNb].sample_period) >> 4;
             AnalogThreadData[analogNb].current_timing_count = 0;
             AnalogThreadData[analogNb].timing_status = 1;
-            Packet_Put(0x01, 1, AnalogThreadData[analogNb].target_timing_count, AnalogThreadData[analogNb].target_timing_count >> 8);
           }
           else if (AnalogThreadData[analogNb].timing_status == 1)// Already definite timing
           {
             // Count Time
-            Packet_Put(0x01, 2, AnalogThreadData[analogNb].current_timing_count, AnalogThreadData[analogNb].current_timing_count >> 8);
             AnalogThreadData[analogNb].current_timing_count ++;
             if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
             {
@@ -327,70 +298,73 @@ void CycleThread(void* pData)
       else // RMS in range
       {
         AnalogThreadData[analogNb].tapping_status_code = 0;
-        // PIT - stop timing
-        PIT_Enable(AnalogThreadData[analogNb].channelNb + 1, FALSE);
         AnalogThreadData[analogNb].timing_status = 0;
       }
     }
 
+    UpadateAnalogOutput();
 
-    bool hasAlarming = FALSE;
-    bool hasRaiseTapping = FALSE;
-    bool hasLowerTapping = FALSE;
-
-    // Check each analog channel status
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    {
-      if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
-        hasAlarming = TRUE;
-
-      if (AnalogThreadData[analogNb].tapping_status_code == 1)
-        hasLowerTapping = TRUE;
-      else if (AnalogThreadData[analogNb].tapping_status_code == 2)
-        hasRaiseTapping = TRUE;
-    }
-
-    // If one or more channel is alarming
-    if (hasAlarming)
-    {
-      LEDs_On(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_BLUE);
-      Analog_Put(ANALOG_ALARM_CHANNEL, 0);
-    }
-
-    // If one or more channel is raise tapping
-    if (hasRaiseTapping)
-    {
-      LEDs_On(LED_YELLOW);
-      Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_YELLOW);
-      Analog_Put(ANALOG_RAISE_CHANNEL, 0);
-    }
-
-    // If one or more channel is lower tapping
-    if (hasLowerTapping)
-    {
-      LEDs_On(LED_GREEN);
-      Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
-    }
-    else
-    {
-      LEDs_Off(LED_GREEN);
-      Analog_Put(ANALOG_LOWER_CHANNEL, 0);
-    }
   }
 }
 
 
+/*! @brief
+ *
+ */
+void UpadateAnalogOutput(void)
+{
+  bool hasAlarming = FALSE;
+  bool hasRaiseTapping = FALSE;
+  bool hasLowerTapping = FALSE;
 
+  // Check each analog channel status
+  for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+  {
+    if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
+      hasAlarming = TRUE;
 
+    if (AnalogThreadData[analogNb].tapping_status_code == 1)
+      hasLowerTapping = TRUE;
+    else if (AnalogThreadData[analogNb].tapping_status_code == 2)
+      hasRaiseTapping = TRUE;
+  }
+
+  // If one or more channel is alarming
+  if (hasAlarming)
+  {
+    LEDs_On(LED_BLUE);
+    Analog_Put(ANALOG_ALARM_CHANNEL, ANALOG_5V);
+  }
+  else
+  {
+    LEDs_Off(LED_BLUE);
+    Analog_Put(ANALOG_ALARM_CHANNEL, 0);
+  }
+
+  // If one or more channel is raise tapping
+  if (hasRaiseTapping)
+  {
+    LEDs_On(LED_YELLOW);
+    Analog_Put(ANALOG_RAISE_CHANNEL, ANALOG_5V);
+  }
+  else
+  {
+    LEDs_Off(LED_YELLOW);
+    Analog_Put(ANALOG_RAISE_CHANNEL, 0);
+  }
+
+  // If one or more channel is lower tapping
+  if (hasLowerTapping)
+  {
+    LEDs_On(LED_GREEN);
+    Analog_Put(ANALOG_LOWER_CHANNEL, ANALOG_5V);
+  }
+  else
+  {
+    LEDs_Off(LED_GREEN);
+    Analog_Put(ANALOG_LOWER_CHANNEL, 0);
+  }
+}
 
 /*! @brief Samples a value on an ADC channel
  *
@@ -410,8 +384,7 @@ void AnalogThread(void* pData)
     // Get analog sample
     Analog_Get(analogData->channelNb, &analogInputValue);
 
-    // Real voltage = analogInputValue / 3276.7 V
-    // 1e-2 V
+    // Real voltage = analogInputValue / 3276.7 (Result unit: 10^-2V)
     realVoltage = analogInputValue * 305 / 1e4;
 
     // Calculate RMS Voltage - rms updated per cycle
@@ -473,10 +446,8 @@ int main(void)
   error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
   // Create Cycle thread
   error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 7);
-  // Create PIT1 thread
-  error = OS_ThreadCreate(PIT1Thread, NULL, &PIT1ThreadStack[THREAD_STACK_SIZE-1], 8);
   // Create Packet thread
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 11);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 8);
 
   // Start multithreading - never returns!
   OS_Start();

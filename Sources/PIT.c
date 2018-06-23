@@ -25,7 +25,6 @@ static uint32_t PITModuleClk;
 bool PIT_Init(const uint32_t moduleClk)
 {
   PIT0Sem = OS_SemaphoreCreate(0);
-  PIT1Sem = OS_SemaphoreCreate(0);
 
   PITModuleClk = moduleClk;
 
@@ -37,9 +36,6 @@ bool PIT_Init(const uint32_t moduleClk)
   // Initialize NVICs for PIT
   NVICICPR2 = (1 << (68 % 32));
   NVICISER2 = (1 << (68 % 32));
-
-  NVICICPR2 = (1 << (69 % 32));
-  NVICISER2 = (1 << (69 % 32));
 
   PIT_MCR &= ~PIT_MCR_MDIS_MASK;
 
@@ -57,48 +53,29 @@ bool PIT_Init(const uint32_t moduleClk)
  *                 FALSE if the PIT will use the new value after a trigger event.
  *  @note The function will enable the timer and interrupts for the PIT.
  */
-void PIT_Set(uint8_t ch, const uint32_t period, const bool restart)
+void PIT_Set(const uint32_t period, const bool restart)
 {
   uint32_t trigger = (PITModuleClk / (1e9 / period)) - 1;
 
   if (restart)
-    PIT_Enable(ch, FALSE);
+    PIT_Enable(FALSE);
 
-  switch (ch)
-  {
-    case 0:
-      PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
-      break;
-    case 1:
-      PIT_LDVAL1 = PIT_LDVAL_TSV(trigger);
-      break;
-  }
+  PIT_LDVAL0 = PIT_LDVAL_TSV(trigger);
 
   if (restart)
-    PIT_Enable(ch, TRUE);
+    PIT_Enable(TRUE);
 }
 
 /*! @brief Enables or disables the PIT.
  *
  *  @param enable - TRUE if the PIT is to be enabled, FALSE if the PIT is to be disabled.
  */
-void PIT_Enable(uint8_t ch, const bool enable)
+void PIT_Enable(const bool enable)
 {
-  switch (ch)
-  {
-    case 0:
-      if (enable)
-        PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
-      else
-        PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
-      break;
-    case 1:
-      if (enable)
-        PIT_TCTRL1 |= PIT_TCTRL_TEN_MASK;
-      else
-        PIT_TCTRL1 &= ~PIT_TCTRL_TEN_MASK;
-      break;
-  }
+  if (enable)
+    PIT_TCTRL0 |= PIT_TCTRL_TEN_MASK;
+  else
+    PIT_TCTRL0 &= ~PIT_TCTRL_TEN_MASK;
 }
 
 /*! @brief Interrupt service routine for the PIT.
@@ -111,17 +88,8 @@ void __attribute__ ((interrupt)) PIT_ISR(void)
 {
   OS_ISREnter();
 
-  if (PIT_TFLG0 & PIT_TFLG_TIF_MASK)
-  {
-    PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
-    OS_SemaphoreSignal(PIT0Sem);
-  }
-
-  if (PIT_TFLG1 & PIT_TFLG_TIF_MASK)
-  {
-    PIT_TFLG1 |= PIT_TFLG_TIF_MASK;
-    OS_SemaphoreSignal(PIT1Sem);
-  }
+  PIT_TFLG0 |= PIT_TFLG_TIF_MASK;
+  OS_SemaphoreSignal(PIT0Sem);
 
   OS_ISRExit();
 }
