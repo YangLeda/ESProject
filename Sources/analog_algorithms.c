@@ -65,7 +65,7 @@ void Algorithm_Frequency(int16_t realVoltage)
       if (AnalogThreadData[0].rms >= 150)
       {
         AnalogThreadData[0].frequency = new_frequency;
-        AnalogThreadData[0].sample_period = new_cycle_period / 16;
+        AnalogThreadData[0].sample_period = new_cycle_period >> 4;
       }
       else // Below 1.5V then 50Hz assumed
       {
