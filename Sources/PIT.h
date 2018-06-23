@@ -21,8 +21,6 @@
 // Semaphores of PIT
 OS_ECB* PIT0Sem;
 OS_ECB* PIT1Sem;
-OS_ECB* PIT2Sem;
-OS_ECB* PIT3Sem;
 
 /*! @brief Sets up the PIT before first use.
  *
