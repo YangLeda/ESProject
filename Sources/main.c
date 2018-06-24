@@ -207,13 +207,13 @@ void Tap(uint8_t channelNb)
   {
     AnalogThreadData[channelNb].tapping_status_code = 1;
     // Update event number to flash
-    Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
+    Flash_Write16((uint16_t*) NumOfLower, NumOfLower->l + 1);
   }
   else if (AnalogThreadData[channelNb].rms < 200)
   {
     AnalogThreadData[channelNb].tapping_status_code = 2;
     // Update event number to flash
-    Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
+    Flash_Write16((uint16_t*) NumOfRaise, NumOfRaise->l + 1);
   }
 }
 
@@ -244,9 +244,9 @@ static void InitModulesThread(void* pData)
   Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
   Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
   Flash_AllocateVar((volatile void**) &TimingMode, sizeof(*TimingMode));
-  Flash_Write16((uint16*) NumOfRaise, 0);
-  Flash_Write16((uint16*) NumOfLower, 0);
-  Flash_Write8(TimingMode, INITIAL_TIMING_MODE);
+  Flash_Write16((uint16_t*) NumOfRaise, 0);
+  Flash_Write16((uint16_t*) NumOfLower, 0);
+  Flash_Write8((uint8_t*) TimingMode, INITIAL_TIMING_MODE);
 
   // Send startup packets
   Packet_Put(0x04, 0, 0, 0);
