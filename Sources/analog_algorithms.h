@@ -73,6 +73,6 @@ void Algorithm_RMS(uint8_t ch, int16_t realVoltage);
 
 void Algorithm_Frequency(int16_t realVoltage);
 
-//void iterative_cooley_tukey(double complex *X);
+void FFT_Cooley_Tukey(double complex *X);
 
 #endif

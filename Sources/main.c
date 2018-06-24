@@ -82,56 +82,9 @@ uint16union_t* volatile NumOfLower;
 // 1 - definite timing mode; 2 - inverse timing mode
 uint8_t* volatile TimingMode;
 
-double complex x[16] = {196,66,-74,-203,-294,-335,-319,-260,-167,-50,71,185,273,327,337,291};/////
-double y[16];
-
-
-
 
 void UpadateAnalogOutput(void);
 void UpadateTiming(void);
-
-
-void bit_reverse(double complex *X) {
-    for (uint8_t i = 0; i < 16; ++i) {
-      uint8_t n = i;
-      uint8_t a = i;
-      uint8_t count = 3;
-
-        n >>= 1;
-        while (n > 0) {
-            a = (a << 1) | (n & 1);
-            count--;
-            n >>= 1;
-        }
-        n = (a << count) & ((1 << 4) - 1);
-
-        if (n > i) {
-            double complex tmp = X[i];
-            X[i] = X[n];
-            X[n] = tmp;
-        }
-    }
-}
-
-void iterative_cooley_tukey(double complex *X) {
-    bit_reverse(X);
-
-    for (uint8_t i = 0; i < 4; i ++) {
-      uint8_t stride = pow(2, i);
-      double complex w = cexp(-2.0 * I * M_PI / stride);
-      for (uint8_t j = 0; j < 16; j += stride) {
-        double complex v = 1.0;
-        for (uint8_t k = 0; k < stride / 2; ++k) {
-            X[k + j + stride / 2] = X[k + j] - v * X[k + j + stride / 2];
-            X[k + j] -= (X[k + j + stride / 2] - X[k + j]);
-            v *= w;
-        }
-      }
-    }
-
-}
-
 
 
 
@@ -330,6 +283,9 @@ void UpadateTiming(void)
         uint8_t deviationTimingCount; // Target number of counts before time out
 
         deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
+        Packet_Put(0x01, deviationTimingCount, 0, 0);
+        deviationTimingCount = 250 / deviation / (AnalogThreadData[analogNb].sample_period / 1e9);
+        Packet_Put(0x02, deviationTimingCount, 0, 0);
 
         if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
         {
@@ -494,12 +450,10 @@ void SpectrumThread(void* data)
   {
     (void)OS_SemaphoreWait(SpectrumSem, 0);
 
-    Packet_Put(0xff, 0, 0, 0);
-
-    iterative_cooley_tukey(AnalogThreadData[0].voltage);
-    for (uint8_t i = 0; i < 16; ++i) {
-      y[i] = cabs(x[i]);
-    }
+    /*
+    FFT_Cooley_Tukey(AnalogThreadData[0].voltage);
+    result = cabs(AnalogThreadData[0].voltage[i]);
+    */
 
     Packet_Put(0x19, 0, 0, 0);
   }
