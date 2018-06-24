@@ -31,17 +31,18 @@ bool PIT_Init(const uint32_t moduleClk)
   // Enable clock register 6 for PIT
   SIM_SCGC6 |= SIM_SCGC6_PIT_MASK;
 
+  // Disable PIT
   PIT_MCR |= PIT_MCR_MDIS_MASK;
 
   // Initialize NVICs for PIT
   NVICICPR2 = (1 << (68 % 32));
   NVICISER2 = (1 << (68 % 32));
 
+  // Enable PIT
   PIT_MCR &= ~PIT_MCR_MDIS_MASK;
 
   // Timer interrupt enable
   PIT_TCTRL0 |= PIT_TCTRL_TIE_MASK;
-  PIT_TCTRL1 |= PIT_TCTRL_TIE_MASK;
 
   return TRUE;
 }

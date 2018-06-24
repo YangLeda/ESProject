@@ -89,7 +89,7 @@ double y[16];
 
 
 void UpadateAnalogOutput(void);
-
+void UpadateTiming(void);
 
 
 void bit_reverse(double complex *X) {
@@ -204,15 +204,17 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 void Tap(uint8_t channelNb)
 {
   if (AnalogThreadData[channelNb].rms > 300)
+  {
     AnalogThreadData[channelNb].tapping_status_code = 1;
-  else if (AnalogThreadData[channelNb].rms < 200)
-    AnalogThreadData[channelNb].tapping_status_code = 2;
-
-  // Update event number to flash
-  if (AnalogThreadData[channelNb].tapping_status_code == 1)
+    // Update event number to flash
     Flash_Write16((uint16*) NumOfLower, NumOfLower->l + 1);
-  else if (AnalogThreadData[channelNb].tapping_status_code == 2)
+  }
+  else if (AnalogThreadData[channelNb].rms < 200)
+  {
+    AnalogThreadData[channelNb].tapping_status_code = 2;
+    // Update event number to flash
     Flash_Write16((uint16*) NumOfRaise, NumOfRaise->l + 1);
+  }
 }
 
 /*! @brief Initializes modules and send a startup packet.
@@ -226,15 +228,13 @@ static void InitModulesThread(void* pData)
   bool flashInitResult = Flash_Init();
   bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
   bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
-
-  // Initialize cycle semaphore
-  CycleSem = OS_SemaphoreCreate(0);
-  SpectrumSem = OS_SemaphoreCreate(0);
-
   // Sampling PIT timers - PIT0 for analog channel 0, PIT1 for analog channel 1 & 2
   PIT_Set(INITIAL_SAMPLE_PERIOD, FALSE);
   PIT_Enable(TRUE);
 
+  // Initialize cycle semaphore
+  CycleSem = OS_SemaphoreCreate(0);
+  SpectrumSem = OS_SemaphoreCreate(0);
 
   // Generate the global analog semaphores
   for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
@@ -282,85 +282,96 @@ void CycleThread(void* pData)
   {
     (void)OS_SemaphoreWait(CycleSem, 0);
 
-    // Check each channel's RMS and update timers
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    {
-      if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
-      {
-        if (*TimingMode == 1) // Definite mode
-        {
-          if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 2) // Not timing or is inverse timing
-          {
-            AnalogThreadData[analogNb].target_timing_count = (uint16_t)(TIME_DEFINITE / AnalogThreadData[analogNb].sample_period) >> 4;
-            AnalogThreadData[analogNb].current_timing_count = 0;
-            AnalogThreadData[analogNb].timing_status = 1;
-          }
-          else if (AnalogThreadData[analogNb].timing_status == 1)// Already definite timing
-          {
-            // Count Time
-            AnalogThreadData[analogNb].current_timing_count ++;
-            if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
-            {
-              // Already tap, stop timing count
-              AnalogThreadData[analogNb].timing_status = 3;
-              Tap(analogNb);
-            }
-          }
-        }
-        else // Inverse mode
-        {
-          uint16_t deviation; // Deviation of RMS
-          if (AnalogThreadData[analogNb].rms < 250)
-            deviation = 250 - AnalogThreadData[analogNb].rms;
-          else
-            deviation = AnalogThreadData[analogNb].rms - 250;
-
-          uint8_t deviationTimingCount; // Target number of counts before time out
-
-          deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
-
-          if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
-          {
-            AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
-            AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
-            AnalogThreadData[analogNb].current_timing_count = 0;
-            AnalogThreadData[analogNb].timing_status = 2;
-          }
-          else if (AnalogThreadData[analogNb].timing_status == 2)// Already inverse timing
-          {
-            // Count Time
-            AnalogThreadData[analogNb].current_timing_count ++;
-
-            if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
-            {
-              // Already tap, stop timing count
-              AnalogThreadData[analogNb].timing_status = 3;
-              Tap(analogNb);
-            }
-                        
-            if (AnalogThreadData[analogNb].last_deviation_count != deviationTimingCount) // RMS deviation count fluctuated
-            {
-              AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
-              // New target count according to remaining rate
-              uint8_t newTargetTimingCount; 
-              newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + (1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count) * deviationTimingCount;
-              AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
-            }
-
-          }
-        }
-      }
-      else // RMS in range
-      {
-        AnalogThreadData[analogNb].tapping_status_code = 0;
-        AnalogThreadData[analogNb].timing_status = 0;
-      }
-    }
+    UpadateTiming();
 
     UpadateAnalogOutput();
 
   }
 }
+
+/*! @brief
+ *
+ */
+void UpadateTiming(void)
+{
+  // Check each channel's RMS and update timers
+  for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+  {
+    if (AnalogThreadData[analogNb].rms < 200 || AnalogThreadData[analogNb].rms > 300) // RMS out of range
+    {
+      if (*TimingMode == 1) // Definite mode
+      {
+        if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 2) // Not timing or is inverse timing
+        {
+          AnalogThreadData[analogNb].target_timing_count = (uint16_t)(TIME_DEFINITE / AnalogThreadData[analogNb].sample_period) >> 4;
+          AnalogThreadData[analogNb].current_timing_count = 0;
+          AnalogThreadData[analogNb].timing_status = 1;
+        }
+        else if (AnalogThreadData[analogNb].timing_status == 1)// Already definite timing
+        {
+          // Count Time
+          AnalogThreadData[analogNb].current_timing_count ++;
+          if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
+          {
+            // Already tap, stop timing count
+            AnalogThreadData[analogNb].timing_status = 3;
+            Tap(analogNb);
+          }
+        }
+      }
+      else // Inverse mode
+      {
+        uint16_t deviation; // Deviation of RMS
+        if (AnalogThreadData[analogNb].rms < 250)
+          deviation = 250 - AnalogThreadData[analogNb].rms;
+        else
+          deviation = AnalogThreadData[analogNb].rms - 250;
+
+        uint8_t deviationTimingCount; // Target number of counts before time out
+
+        deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
+
+        if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
+        {
+          AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
+          AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
+          AnalogThreadData[analogNb].current_timing_count = 0;
+          AnalogThreadData[analogNb].timing_status = 2;
+        }
+        else if (AnalogThreadData[analogNb].timing_status == 2)// Already inverse timing
+        {
+          // Count Time
+          AnalogThreadData[analogNb].current_timing_count ++;
+
+          if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
+          {
+            // Already tap, stop timing count
+            AnalogThreadData[analogNb].timing_status = 3;
+            Tap(analogNb);
+          }
+
+          if (AnalogThreadData[analogNb].last_deviation_count != deviationTimingCount) // RMS deviation count fluctuated
+          {
+            AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
+            // New target count according to remaining rate
+            uint8_t newTargetTimingCount;
+            newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + (1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count) * deviationTimingCount;
+            AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
+          }
+
+        }
+      }
+    }
+    else // RMS in range
+    {
+      AnalogThreadData[analogNb].tapping_status_code = 0;
+      AnalogThreadData[analogNb].timing_status = 0;
+    }
+  }
+
+}
+
+
 
 
 /*! @brief
@@ -377,7 +388,6 @@ void UpadateAnalogOutput(void)
   {
     if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
       hasAlarming = TRUE;
-
     if (AnalogThreadData[analogNb].tapping_status_code == 1)
       hasLowerTapping = TRUE;
     else if (AnalogThreadData[analogNb].tapping_status_code == 2)
@@ -447,12 +457,6 @@ void AnalogThread(void* pData)
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
 
-    if (analogData->channelNb == 0)
-    {
-      //Packet_Put(0x01, 0, analogInputValue, analogInputValue >> 8);
-      //Packet_Put(0x02, 0, realVoltage, realVoltage >> 8);
-    }
-
     // Find zero crossing
     if (analogData->channelNb == 0)
     {
@@ -460,8 +464,6 @@ void AnalogThread(void* pData)
       Analog_Put(3, analogInputValue);
 
       Algorithm_Frequency(realVoltage);
-      
-      analogData->last_sample = realVoltage;
     }
 
   }
@@ -520,9 +522,9 @@ int main(void)
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
   // Create UARTReceive thread
-  error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE-1], 1);
+  error = OS_ThreadCreate(UARTReceiveThread, NULL, &UARTReceiveThreadStack[THREAD_STACK_SIZE - 1], 1);
   // Create UARTTransmit thread
-  error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE-1], 2);
+  error = OS_ThreadCreate(UARTTransmitThread, NULL, &UARTTransmitThreadStack[THREAD_STACK_SIZE - 1], 2);
   // Create Analog threads
   for (uint8_t threadNb = 0; threadNb < NB_ANALOG_CHANNELS; threadNb++)
     error = OS_ThreadCreate(AnalogThread,
@@ -530,13 +532,13 @@ int main(void)
                             &AnalogThreadStacks[threadNb][THREAD_STACK_SIZE - 1],
                             ANALOG_THREAD_PRIORITIES[threadNb]);
   // Create PIT0 thread
-  error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE-1], 6);
+  error = OS_ThreadCreate(PIT0Thread, NULL, &PIT0ThreadStack[THREAD_STACK_SIZE - 1], 6);
   // Create Cycle thread
-  error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE-1], 7);
+  error = OS_ThreadCreate(CycleThread, NULL, &CycleThreadStack[THREAD_STACK_SIZE - 1], 7);
   // Create Packet thread
-  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE-1], 8);
+  error = OS_ThreadCreate(PacketThread, NULL, &PacketThreadStack[THREAD_STACK_SIZE - 1], 8);
   // Create Packet thread
-  error = OS_ThreadCreate(SpectrumThread, NULL, &SpectrumThreadStack[THREAD_STACK_SIZE-1], 9);
+  error = OS_ThreadCreate(SpectrumThread, NULL, &SpectrumThreadStack[THREAD_STACK_SIZE - 1], 9);
 
   // Start multithreading - never returns!
   OS_Start();

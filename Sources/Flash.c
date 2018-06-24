@@ -71,7 +71,6 @@ static bool LaunchCommand(TFCCOB* commonCommandObject)
 static bool WritePhrase(const uint8_t phrase[])
 {
   // Erase before programming
-  EnterCritical();
   if (Flash_Erase())
   {
     // Set tfcoob for program phrase command
@@ -89,12 +88,9 @@ static bool WritePhrase(const uint8_t phrase[])
     tfccob.data[5] = phrase[5];
     tfccob.data[6] = phrase[6];
     tfccob.data[7] = phrase[7];
-
     // Launch the command
-    ExitCritical();
     return LaunchCommand(&tfccob);
   }
-  ExitCritical();
   return FALSE;
 }
 
@@ -264,13 +260,3 @@ bool Flash_Erase(void)
   return LaunchCommand(&tfccob);
 }
 
-
-
-
-
-
-
-// Change AllocationMap to a single byte.
-// Replace hard-coded Flash address with const start address.
-// Tower number const. Tower version const.
-// Do not readFlash() into a buffer. Force cast start address to data type instead.
