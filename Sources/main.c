@@ -57,8 +57,8 @@
 
 #define ANALOG_5V 16384
 
-#define INITIAL_TIMING_MODE 2
-#define TIME_DEFINITE 1e9
+#define INITIAL_TIMING_MODE 1
+#define TIME_DEFINITE 5e9
 
 
 // Thread stacks
@@ -331,7 +331,7 @@ void UpadateTiming(void)
 
         deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
 
-        if (AnalogThreadData[analogNb].timing_status == 0 ||AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
+        if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
         {
           AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
           AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
