@@ -11,7 +11,6 @@
 #ifndef LEDS_H
 #define LEDS_H
 
-
 /*! @brief LED to pin mapping on the TWR-K70F120M
  *
  */

@@ -17,7 +17,6 @@
 #include "MK70F12.h"
 #include "OS.h"
 
-
 // Semaphores of PIT
 OS_ECB* PIT0Sem;
 
@@ -54,6 +53,5 @@ void PIT_Enable(const bool enable);
  *  @note Assumes the PIT has been initialized.
  */
 void __attribute__ ((interrupt)) PIT_ISR(void);
-
 
 #endif

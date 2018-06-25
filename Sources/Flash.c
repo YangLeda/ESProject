@@ -4,8 +4,8 @@
  *
  *  This contains the functions needed for accessing the internal Flash.
  *
- *  @author Leda Yang, Jiayi Li
- *  @date 2018-05-30
+ *  @author Leda Yang
+ *  @date 2018-06-26
  */
 
 #include "Flash.h"
@@ -56,7 +56,6 @@ static bool LaunchCommand(TFCCOB* commonCommandObject)
 
     // FCCOB availability check, CCIF returns to 1 when command completes
     while (!(FTFE_FSTAT & FTFE_FSTAT_CCIF_MASK));
-
     return TRUE;
   }
   return FALSE;
@@ -259,4 +258,3 @@ bool Flash_Erase(void)
   // Launch the command
   return LaunchCommand(&tfccob);
 }
-

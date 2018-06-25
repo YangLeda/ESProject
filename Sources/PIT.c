@@ -4,14 +4,13 @@
  *
  *  This contains the functions for operating the periodic interrupt timer (PIT).
  *
- *  @author Leda Yang, Jiayi Li
- *  @date 2018-05-30
+ *  @author Leda Yang
+ *  @date 2018-06-26
  */
 
 #include "PIT.h"
 
 static uint32_t PITModuleClk;
-
 
 /*! @brief Sets up the PIT before first use.
  *
@@ -94,4 +93,3 @@ void __attribute__ ((interrupt)) PIT_ISR(void)
 
   OS_ISRExit();
 }
-

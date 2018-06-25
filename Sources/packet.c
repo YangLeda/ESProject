@@ -4,8 +4,8 @@
  *
  *  This contains the functions implementations of the "Tower to PC Protocol" 5-byte packets.
  *
- *  @author Leda Yang, Jiayi Li
- *  @date 2018-05-30
+ *  @author Leda Yang
+ *  @date 2018-06-26
  */
 
 #include "packet.h"

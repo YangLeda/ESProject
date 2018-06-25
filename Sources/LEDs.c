@@ -4,8 +4,8 @@
  *
  *  This contains the functions for operating the LEDs.
  *
- *  @author Leda Yang, Jiayi Li
- *  @date 2018-05-30
+ *  @author Leda Yang
+ *  @date 2018-06-26
  */
 
 // new types

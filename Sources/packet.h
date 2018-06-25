@@ -75,7 +75,6 @@ extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
 // Semaphores of PIT
 OS_ECB* SpectrumSem;
 
-
 /*! @brief Initializes the packets by calling the initialization routines of the supporting software modules.
  *
  *  @param baudRate The desired baud rate in bits/sec.
