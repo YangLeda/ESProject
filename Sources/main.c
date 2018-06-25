@@ -51,15 +51,6 @@
 #define BAUD 115200
 
 
-#define ANALOG_RAISE_CHANNEL 0
-#define ANALOG_LOWER_CHANNEL 1
-#define ANALOG_ALARM_CHANNEL 2
-
-#define ANALOG_5V 16384
-
-#define INITIAL_TIMING_MODE 1
-#define TIME_DEFINITE 5e9
-
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);

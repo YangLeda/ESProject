@@ -1,23 +1,27 @@
 /*! @file
  *
- *  @brief Routines for controlling Periodic Interrupt Timer (PIT) on the TWR-K70F120M.
+ *  @brief Routines and algorithms for analog VRR on the TWR-K70F120M.
  *
- *  This contains the functions for operating the periodic interrupt timer (PIT).
+ *  This contains the functions for analog VRR algorithms.
  *
  *  @author Leda Yang
- *  @date 2018-06-25
+ *  @date 2018-06-26
  */
 
 #include "analog_algorithms.h"
 
-// One step Newton's method - RMS(n+1) = (RMS(n) + mean_rms_squares / RMS(n)) / 2
+/*! @brief Handle RMS calculation.
+ *
+ *  Using one step Newton's method.
+ *  @param ch The channel number.
+ *  @param realVoltage The converted sample voltage.
+ *  @return void
+ */
 void Algorithm_RMS(uint8_t channelNb, int16_t realVoltage)
 {
   // Put new voltage square into array
-  AnalogThreadData[channelNb].voltageSquares[AnalogThreadData[channelNb].sampleCount] = (uint32_t) realVoltage * realVoltage;
+  AnalogThreadData[channelNb].voltageSquares[AnalogThreadData[channelNb].sampleCount] = (uint32_t) realVoltage * (uint32_t) realVoltage;
   AnalogThreadData[channelNb].sampleCount ++;
-
-
 
   // Calculate and update new rms each cycle
   if (AnalogThreadData[channelNb].sampleCount > 15)
@@ -36,14 +40,15 @@ void Algorithm_RMS(uint8_t channelNb, int16_t realVoltage)
 
     // Signal cycle semaphore when 16 samples are collected on ch0
     if (channelNb == 0)
-    {
-
       OS_SemaphoreSignal(CycleSem);
-    }
-
   }
 }
 
+/*! @brief Handle frequency calculation and update timer.
+ *
+ *  @param realVoltage The converted sample voltage.
+ *  @return void
+ */
 void Algorithm_Frequency(int16_t realVoltage)
 {
   // Zero crossing - low to high
@@ -61,9 +66,10 @@ void Algorithm_Frequency(int16_t realVoltage)
         // Calculate right time offset
         AnalogThreadData[0].frequencyTrackingRightFixTime = realVoltage * AnalogThreadData[0].samplePeriod / (realVoltage - AnalogThreadData[0].sample);
         AnalogThreadData[0].frequencyTrackingCrossingCount = 0;
-        // In nano second
+
         uint64_t new_cycle_period = AnalogThreadData[0].frequencyTrackingSampleCount * AnalogThreadData[0].samplePeriod + AnalogThreadData[0].frequencyTrackingLeftFixTime - AnalogThreadData[0].frequencyTrackingRightFixTime;
-        uint16_t new_frequency = 1e10 / new_cycle_period; // Calculate frequency
+        // Calculate frequency
+        uint16_t new_frequency = 1e10 / new_cycle_period;
 
         // Update frequency
         if (AnalogThreadData[0].rms >= 150)
@@ -77,6 +83,7 @@ void Algorithm_Frequency(int16_t realVoltage)
           AnalogThreadData[0].samplePeriod = INITIAL_SAMPLE_PERIOD;
         }
 
+        // Update timer
         PIT_Set(AnalogThreadData[0].samplePeriod, FALSE);
         break;
       default:
@@ -87,6 +94,12 @@ void Algorithm_Frequency(int16_t realVoltage)
   AnalogThreadData[0].frequencyTrackingSampleCount ++;
 }
 
+/*! @brief 16 samples Fast Fourier Transform by recursive Cooley-Tukey method.
+ *
+ *  Reference: https://www.algorithm-archive.org/chapters/FFT/cooley_tukey.html
+ *  @param sample The 16 samples array.
+ *  @return void
+ */
 void FFT_Cooley_Tukey(double complex *sample)
 {
   // Bit reverse
@@ -130,7 +143,10 @@ void FFT_Cooley_Tukey(double complex *sample)
   }
 }
 
-
+/*! @brief Calculate the magnitude of a complex number by Newton's method.
+ *
+ *  @return uint16_t The magnitude result.
+ */
 uint16_t Magnitude(int16_t real, int16_t image)
 {
   uint32_t squareMagnitude;
