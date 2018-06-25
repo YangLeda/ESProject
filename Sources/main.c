@@ -43,14 +43,10 @@
 // Algorithms
 #include "analog_algorithms.h"
 
-
-
 // Arbitrary thread stack size - big enough for stacking of interrupts and OS use
 #define THREAD_STACK_SIZE 100
 // Baud rate
 #define BAUD 115200
-
-
 
 // Thread stacks
 OS_THREAD_STACK(InitModulesThreadStack, THREAD_STACK_SIZE);
@@ -65,24 +61,13 @@ OS_THREAD_STACK(SpectrumThreadStack, THREAD_STACK_SIZE);
 // Thread priorities - 0 is highest priority
 const uint8_t ANALOG_THREAD_PRIORITIES[NB_ANALOG_CHANNELS] = {3, 4, 5};
 
-
-// Flash WritePhrase is in critical section
 // Non-volatile variables for numbers of raise/lower events
 uint16union_t* volatile NumOfRaise;
 uint16union_t* volatile NumOfLower;
 // 1 - definite timing mode; 2 - inverse timing mode
 uint8_t* volatile TimingMode;
 
-
-void UpadateAnalogOutput(void);
-void UpadateTiming(void);
-
-
-
-
-/*! @brief Analog thread configuration data
- *
- */
+// Analog thread data
 TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
 {
   {
@@ -127,6 +112,9 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   }
 };
 
+/*! @brief Update tapping status code and write events numbers to Flash
+ *
+ */
 void Tap(uint8_t channelNb)
 {
   if (AnalogThreadData[channelNb].rms > 300)
@@ -143,79 +131,7 @@ void Tap(uint8_t channelNb)
   }
 }
 
-/*! @brief Initializes modules and send a startup packet.
- *
- */
-static void InitModulesThread(void* pData)
-{
-  // Initialize modules
-  bool ledsInitResult = LEDs_Init();
-  bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
-  bool flashInitResult = Flash_Init();
-  bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
-  bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
-  // Sampling PIT timers - PIT0 for analog channel 0, PIT1 for analog channel 1 & 2
-  PIT_Set(INITIAL_SAMPLE_PERIOD, FALSE);
-  PIT_Enable(TRUE);
-
-  // Initialize cycle semaphore
-  CycleSem = OS_SemaphoreCreate(0);
-  SpectrumSem = OS_SemaphoreCreate(0);
-
-  // Generate the global analog semaphores
-  for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-    AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
-
-  // Initialize number of raise/lower events to 0
-  Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
-  Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
-  Flash_AllocateVar((volatile void**) &TimingMode, sizeof(*TimingMode));
-  Flash_Write16((uint16_t*) NumOfRaise, 0);
-  Flash_Write16((uint16_t*) NumOfLower, 0);
-  Flash_Write8((uint8_t*) TimingMode, INITIAL_TIMING_MODE);
-
-  // Send startup packets
-  Packet_Put(0x04, 0, 0, 0);
-
-
-  // We only do this once - therefore delete this thread
-  OS_ThreadDelete(OS_PRIORITY_SELF);
-}
-
-
-/*! @brief Sample rate 16 per cycle.
- *
- */
-void PIT0Thread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(PIT0Sem, 0);
-
-    // Signal each analog channel to take a sample
-    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
-      (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
-  }
-}
-
-
-/*! @brief Each cycle. Check each channel's RMS. Set and update 3 timers. Control 3 outputs.
- *
- */
-void CycleThread(void* pData)
-{
-  for (;;)
-  {
-    (void)OS_SemaphoreWait(CycleSem, 0);
-
-    UpadateTiming();
-
-    UpadateAnalogOutput();
-
-  }
-}
-
-/*! @brief
+/*! @brief Timing logics for two modes.
  *
  */
 void UpadateTiming(void)
@@ -230,12 +146,12 @@ void UpadateTiming(void)
         switch (AnalogThreadData[analogNb].timingStatusCode)
         {
           case 0:// Not timing
-          case 2: //or is inverse timing
+          case 2: // Is inverse timing
             AnalogThreadData[analogNb].targetTimingCount = (uint16_t) (TIME_DEFINITE / AnalogThreadData[0].samplePeriod) >> 4;
             AnalogThreadData[analogNb].currentTimingCount = 0;
             AnalogThreadData[analogNb].timingStatusCode = 1;
             break;
-          case 1:
+          case 1: // Already definite timing
             // Count Time
             AnalogThreadData[analogNb].currentTimingCount ++;
             if (AnalogThreadData[analogNb].currentTimingCount >= AnalogThreadData[analogNb].targetTimingCount) // Time out
@@ -246,7 +162,6 @@ void UpadateTiming(void)
             }
             break;
         }
-
       }
       else // Inverse mode
       {
@@ -262,12 +177,12 @@ void UpadateTiming(void)
         switch (AnalogThreadData[analogNb].timingStatusCode)
         {
           case 0:// Not timing
-          case 1: // Not timing or is definite timing, start inverse timing
+          case 1: // Is definite timing
             AnalogThreadData[analogNb].targetTimingCount = deviationTimingCount;
             AnalogThreadData[analogNb].currentTimingCount = 0;
             AnalogThreadData[analogNb].timingStatusCode = 2;
             break;
-          case 2:
+          case 2: // Already inverse timing
             // Count Time
             AnalogThreadData[analogNb].currentTimingCount ++;
 
@@ -284,8 +199,6 @@ void UpadateTiming(void)
             AnalogThreadData[analogNb].targetTimingCount = newTargetTimingCount;
             break;
         }
-
-
       }
     }
     else // RMS in range
@@ -294,14 +207,11 @@ void UpadateTiming(void)
       AnalogThreadData[analogNb].timingStatusCode = 0;
     }
   }
-
 }
 
-
-
-
-/*! @brief
+/*! @brief Update three analog outputs.
  *
+ *  Three LEDs are also updated for easier debugging and assessment.
  */
 void UpadateAnalogOutput(void)
 {
@@ -357,8 +267,77 @@ void UpadateAnalogOutput(void)
   }
 }
 
+/*! @brief Initializes modules and send a startup packet.
+ *
+ */
+static void InitModulesThread(void* pData)
+{
+  // Initialize modules
+  bool ledsInitResult = LEDs_Init();
+  bool packetInitResult = Packet_Init(BAUD, CPU_BUS_CLK_HZ);
+  bool flashInitResult = Flash_Init();
+  bool analogInitResult = Analog_Init(CPU_BUS_CLK_HZ);
+  bool pitInitResults = PIT_Init(CPU_BUS_CLK_HZ);
+  // Sampling PIT timers - PIT0 for analog channel 0, PIT1 for analog channel 1 & 2
+  PIT_Set(INITIAL_SAMPLE_PERIOD, FALSE);
+  PIT_Enable(TRUE);
+
+  // Initialize cycle semaphore
+  CycleSem = OS_SemaphoreCreate(0);
+  SpectrumSem = OS_SemaphoreCreate(0);
+
+  // Generate the global analog semaphores
+  for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+    AnalogThreadData[analogNb].semaphore = OS_SemaphoreCreate(0);
+
+  // Initialize number of raise/lower events to 0
+  Flash_AllocateVar((volatile void**) &NumOfRaise, sizeof(*NumOfRaise));
+  Flash_AllocateVar((volatile void**) &NumOfLower, sizeof(*NumOfLower));
+  Flash_AllocateVar((volatile void**) &TimingMode, sizeof(*TimingMode));
+  Flash_Write16((uint16_t*) NumOfRaise, 0);
+  Flash_Write16((uint16_t*) NumOfLower, 0);
+  Flash_Write8((uint8_t*) TimingMode, INITIAL_TIMING_MODE);
+
+  // Send startup packets
+  Packet_Put(0x04, 0, 0, 0);
+
+  // We only do this once - therefore delete this thread
+  OS_ThreadDelete(OS_PRIORITY_SELF);
+}
+
+/*! @brief Sample rate 16 per cycle.
+ *
+ */
+void PIT0Thread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(PIT0Sem, 0);
+
+    // Signal each analog channel to take a sample
+    for (uint8_t analogNb = 0; analogNb < NB_ANALOG_CHANNELS; analogNb++)
+      (void)OS_SemaphoreSignal(AnalogThreadData[analogNb].semaphore);
+  }
+}
+
+/*! @brief Semaphore signaled each analog cycle. Calculations and control 3 outputs.
+ *
+ */
+void CycleThread(void* pData)
+{
+  for (;;)
+  {
+    (void)OS_SemaphoreWait(CycleSem, 0);
+
+    UpadateTiming();
+
+    UpadateAnalogOutput();
+  }
+}
+
 /*! @brief Samples a value on an ADC channel
  *
+ *  Channel 0 input is put to channel 3 output for easier debugging and assessment.
  */
 void AnalogThread(void* pData)
 {
@@ -378,23 +357,19 @@ void AnalogThread(void* pData)
     // Real voltage = analogInputValue / 3276.7 (Result unit: 10^-2V)
     realVoltage = analogInputValue * 305 / 1e4;
 
-
-
     // Calculate RMS Voltage - rms updated per cycle
     Algorithm_RMS(analogData->channelNb, realVoltage);
 
     // Find zero crossing
     if (analogData->channelNb == 0)
     {
-      ///
+      // Loopback
       Analog_Put(3, analogInputValue);
 
       Algorithm_Frequency(realVoltage);
     }
-
   }
 }
-
 
 /*! @brief Routine to receive and handle packets.
  *
@@ -409,9 +384,9 @@ void PacketThread(void* data)
   }
 }
 
-
-/*! @brief
+/*! @brief Thread to calculate spectrum.
  *
+ *  Not actually does the calculation because FFT function need improvements.
  *  @param pData is not used but is required by the OS to create a thread.
  */
 void SpectrumThread(void* data)
@@ -435,8 +410,6 @@ int main(void)
 
   // Initialize the RTOS
   OS_Init(CPU_CORE_CLK_HZ, TRUE);
-
-
 
   // Create InitModules thread
   error = OS_ThreadCreate(InitModulesThread, NULL, &InitModulesThreadStack[THREAD_STACK_SIZE - 1], 0);
