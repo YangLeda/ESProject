@@ -97,60 +97,42 @@ TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS] =
   {
     .semaphore = NULL,
     .channelNb = 0,
-    .voltage = {250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250}, // Assume 2.5V
-    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
-    .sample_count = 15,
+    .voltageSquares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500},
+    .sampleCount = 15,
     .rms = 250,
-    .tapping_status_code = 0,
-    .timing_status = 0,
-    .target_timing_count = 0,
-    .current_timing_count = 0,
+    .tappingStatusCode = 0,
+    .timingStatusCode = 0,
+    .targetTimingCount = 0,
+    .currentTimingCount = 0,
     .frequency = 500,
-    .last_sample = 0,
-    .frequency_tracking_sample_count = 0,
-    .zero_crossing_count = 0,
-    .left_fix_time = 0,
-    .right_fix_time = 0,
-    .last_deviation_count = 0,
-    .sample_period = INITIAL_SAMPLE_PERIOD
+    .sample = 0,
+    .frequencyTrackingSampleCount = 0,
+    .frequencyTrackingCrossingCount = 0,
+    .frequencyTrackingLeftFixTime = 0,
+    .frequencyTrackingRightFixTime = 0,
+    .samplePeriod = INITIAL_SAMPLE_PERIOD
   },
   {
     .semaphore = NULL,
     .channelNb = 1,
-    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
-    .sample_count = 15,
+    .voltageSquares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500},
+    .sampleCount = 15,
     .rms = 250,
-    .tapping_status_code = 0,
-    .timing_status = 0,
-    .target_timing_count = 0,
-    .current_timing_count = 0,
-    .frequency = 500,
-    .last_sample = 0,
-    .frequency_tracking_sample_count = 0,
-    .zero_crossing_count = 0,
-    .left_fix_time = 0,
-    .right_fix_time = 0,
-    .last_deviation_count = 0,
-    .sample_period = INITIAL_SAMPLE_PERIOD
+    .tappingStatusCode = 0,
+    .timingStatusCode = 0,
+    .targetTimingCount = 0,
+    .currentTimingCount = 0,
   },
   {
     .semaphore = NULL,
     .channelNb = 2,
-    .voltage_squares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500}, // Assume 2.5V
-    .sample_count = 15,
+    .voltageSquares = {62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500, 62500},
+    .sampleCount = 15,
     .rms = 250,
-    .tapping_status_code = 0,
-    .timing_status = 0,
-    .target_timing_count = 0,
-    .current_timing_count = 0,
-    .frequency = 500,
-    .last_sample = 0,
-    .frequency_tracking_sample_count = 0,
-    .zero_crossing_count = 0,
-    .left_fix_time = 0,
-    .right_fix_time = 0,
-    .last_deviation_count = 0,
-    .sample_period = INITIAL_SAMPLE_PERIOD
+    .tappingStatusCode = 0,
+    .timingStatusCode = 0,
+    .targetTimingCount = 0,
+    .currentTimingCount = 0,
   }
 };
 
@@ -158,13 +140,13 @@ void Tap(uint8_t channelNb)
 {
   if (AnalogThreadData[channelNb].rms > 300)
   {
-    AnalogThreadData[channelNb].tapping_status_code = 1;
+    AnalogThreadData[channelNb].tappingStatusCode = 1;
     // Update event number to flash
     Flash_Write16((uint16_t*) NumOfLower, NumOfLower->l + 1);
   }
   else if (AnalogThreadData[channelNb].rms < 200)
   {
-    AnalogThreadData[channelNb].tapping_status_code = 2;
+    AnalogThreadData[channelNb].tappingStatusCode = 2;
     // Update event number to flash
     Flash_Write16((uint16_t*) NumOfRaise, NumOfRaise->l + 1);
   }
@@ -254,74 +236,71 @@ void UpadateTiming(void)
     {
       if (*TimingMode == 1) // Definite mode
       {
-        if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 2) // Not timing or is inverse timing
+        switch (AnalogThreadData[analogNb].timingStatusCode)
         {
-          AnalogThreadData[analogNb].target_timing_count = (uint16_t)(TIME_DEFINITE / AnalogThreadData[analogNb].sample_period) >> 4;
-          AnalogThreadData[analogNb].current_timing_count = 0;
-          AnalogThreadData[analogNb].timing_status = 1;
+          case 0:// Not timing
+          case 2: //or is inverse timing
+            AnalogThreadData[analogNb].targetTimingCount = (uint16_t) (TIME_DEFINITE / AnalogThreadData[0].samplePeriod) >> 4;
+            AnalogThreadData[analogNb].currentTimingCount = 0;
+            AnalogThreadData[analogNb].timingStatusCode = 1;
+            break;
+          case 1:
+            // Count Time
+            AnalogThreadData[analogNb].currentTimingCount ++;
+            if (AnalogThreadData[analogNb].currentTimingCount >= AnalogThreadData[analogNb].targetTimingCount) // Time out
+            {
+              // Already tap, stop timing count
+              AnalogThreadData[analogNb].timingStatusCode = 3;
+              Tap(analogNb);
+            }
+            break;
         }
-        else if (AnalogThreadData[analogNb].timing_status == 1)// Already definite timing
-        {
-          // Count Time
-          AnalogThreadData[analogNb].current_timing_count ++;
-          if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
-          {
-            // Already tap, stop timing count
-            AnalogThreadData[analogNb].timing_status = 3;
-            Tap(analogNb);
-          }
-        }
+
       }
       else // Inverse mode
       {
-        uint16_t deviation; // Deviation of RMS
-        if (AnalogThreadData[analogNb].rms < 250)
-          deviation = 250 - AnalogThreadData[analogNb].rms;
-        else
-          deviation = AnalogThreadData[analogNb].rms - 250;
+        // Deviation of voltage RMS
+        int16_t deviation = AnalogThreadData[analogNb].rms - 250;
+        if (deviation < 0)
+          deviation = - deviation;
 
-        uint8_t deviationTimingCount; // Target number of counts before time out
+        // Target number of counts before time out
+        uint8_t deviationTimingCount;
+        deviationTimingCount = 25 * AnalogThreadData[0].frequency / deviation;
 
-        deviationTimingCount = 25 * AnalogThreadData[analogNb].frequency / deviation;
-        Packet_Put(0x01, deviationTimingCount, 0, 0);
-        deviationTimingCount = 250 / deviation / (AnalogThreadData[analogNb].sample_period / 1e9);
-        Packet_Put(0x02, deviationTimingCount, 0, 0);
-
-        if (AnalogThreadData[analogNb].timing_status == 0 || AnalogThreadData[analogNb].timing_status == 1) // Not timing or is definite timing, start inverse timing
+        switch (AnalogThreadData[analogNb].timingStatusCode)
         {
-          AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
-          AnalogThreadData[analogNb].target_timing_count = deviationTimingCount;
-          AnalogThreadData[analogNb].current_timing_count = 0;
-          AnalogThreadData[analogNb].timing_status = 2;
-        }
-        else if (AnalogThreadData[analogNb].timing_status == 2)// Already inverse timing
-        {
-          // Count Time
-          AnalogThreadData[analogNb].current_timing_count ++;
+          case 0:// Not timing
+          case 1: // Not timing or is definite timing, start inverse timing
+            AnalogThreadData[analogNb].targetTimingCount = deviationTimingCount;
+            AnalogThreadData[analogNb].currentTimingCount = 0;
+            AnalogThreadData[analogNb].timingStatusCode = 2;
+            break;
+          case 2:
+            // Count Time
+            AnalogThreadData[analogNb].currentTimingCount ++;
 
-          if (AnalogThreadData[analogNb].current_timing_count >= AnalogThreadData[analogNb].target_timing_count) // Time out
-          {
-            // Already tap, stop timing count
-            AnalogThreadData[analogNb].timing_status = 3;
-            Tap(analogNb);
-          }
+            if (AnalogThreadData[analogNb].currentTimingCount >= AnalogThreadData[analogNb].targetTimingCount) // Time out
+            {
+              // Already tap, stop timing count
+              AnalogThreadData[analogNb].timingStatusCode = 3;
+              Tap(analogNb);
+            }
 
-          if (AnalogThreadData[analogNb].last_deviation_count != deviationTimingCount) // RMS deviation count fluctuated
-          {
-            AnalogThreadData[analogNb].last_deviation_count = deviationTimingCount;
             // New target count according to remaining rate
             uint8_t newTargetTimingCount;
-            newTargetTimingCount = AnalogThreadData[analogNb].current_timing_count + (1 - (float)AnalogThreadData[analogNb].current_timing_count / AnalogThreadData[analogNb].target_timing_count) * deviationTimingCount;
-            AnalogThreadData[analogNb].target_timing_count = newTargetTimingCount;
-          }
-
+            newTargetTimingCount = (1 - (float) AnalogThreadData[analogNb].currentTimingCount / AnalogThreadData[analogNb].targetTimingCount) * deviationTimingCount + AnalogThreadData[analogNb].currentTimingCount;
+            AnalogThreadData[analogNb].targetTimingCount = newTargetTimingCount;
+            break;
         }
+
+
       }
     }
     else // RMS in range
     {
-      AnalogThreadData[analogNb].tapping_status_code = 0;
-      AnalogThreadData[analogNb].timing_status = 0;
+      AnalogThreadData[analogNb].tappingStatusCode = 0;
+      AnalogThreadData[analogNb].timingStatusCode = 0;
     }
   }
 
@@ -344,9 +323,9 @@ void UpadateAnalogOutput(void)
   {
     if (AnalogThreadData[analogNb].rms > 300 || AnalogThreadData[analogNb].rms < 200)
       hasAlarming = TRUE;
-    if (AnalogThreadData[analogNb].tapping_status_code == 1)
+    if (AnalogThreadData[analogNb].tappingStatusCode == 1)
       hasLowerTapping = TRUE;
-    else if (AnalogThreadData[analogNb].tapping_status_code == 2)
+    else if (AnalogThreadData[analogNb].tappingStatusCode == 2)
       hasRaiseTapping = TRUE;
   }
 
@@ -406,7 +385,7 @@ void AnalogThread(void* pData)
     Analog_Get(analogData->channelNb, &analogInputValue);
 
     // Real voltage = analogInputValue / 3276.7 (Result unit: 10^-2V)
-    realVoltage = (int16_t) analogInputValue * 305 / 1e4;
+    realVoltage = analogInputValue * 305 / 1e4;
 
 
 
@@ -449,11 +428,6 @@ void SpectrumThread(void* data)
   for (;;)
   {
     (void)OS_SemaphoreWait(SpectrumSem, 0);
-
-    /*
-    FFT_Cooley_Tukey(AnalogThreadData[0].voltage);
-    result = cabs(AnalogThreadData[0].voltage[i]);
-    */
 
     Packet_Put(0x19, 0, 0, 0);
   }

@@ -30,29 +30,27 @@
 #define INITIAL_SAMPLE_PERIOD 125e4
 
 
-/*! @brief Data structure used to pass Analog configuration to a user thread
+/*! @brief Data structure used to pass analog data to a user thread
  *
  */
 typedef struct AnalogThreadData
 {
   OS_ECB* semaphore;
   uint8_t channelNb;
-  uint32_t voltage_squares[16];
-  double complex voltage[16];
-  uint8_t sample_count; // 0-15
-  uint16_t rms;
-  uint8_t tapping_status_code; // 0 - Not tapping; 1 - Lower; 2 - Raise
-  uint8_t timing_status; // 0 - Not timing; 1 - Definite timing; 2 - Inverse timing
-  uint16_t target_timing_count;
-  uint16_t current_timing_count;
+  uint32_t voltageSquares[16]; // Square voltage of 16 samples
+  uint8_t sampleCount; // Index of next sample in the array
+  uint16_t rms; // Voltage RMS
+  uint8_t tappingStatusCode; // 0 - Not tapping; 1 - Lower tapping; 2 - Raise tapping
+  uint8_t timingStatusCode; // 0 - Not timing; 1 - Definite timing; 2 - Inverse timing; 3 - Already tapping
+  uint16_t targetTimingCount; // Number of counts before tapping
+  uint16_t currentTimingCount; // Current timing count
   uint16_t frequency; // Hz*10
-  int16_t last_sample;
-  uint8_t frequency_tracking_sample_count;
-  uint8_t zero_crossing_count;
-  uint32_t left_fix_time; // In nano second
-  uint32_t right_fix_time; // In nano second
-  uint8_t last_deviation_count;
-  uint32_t sample_period;
+  int16_t sample; // Last voltage sample
+  uint8_t frequencyTrackingSampleCount; // Number of samples between zero crossings
+  uint8_t frequencyTrackingCrossingCount; // Number zero crossings found
+  uint32_t frequencyTrackingLeftFixTime; // Nano second
+  uint32_t frequencyTrackingRightFixTime; // Nano second
+  uint32_t samplePeriod; // Sampling period
 } TAnalogThreadData;
 
 extern TAnalogThreadData AnalogThreadData[NB_ANALOG_CHANNELS];
@@ -73,6 +71,8 @@ void Algorithm_RMS(uint8_t ch, int16_t realVoltage);
 
 void Algorithm_Frequency(int16_t realVoltage);
 
-void FFT_Cooley_Tukey(double complex *X);
+void FFT_Cooley_Tukey(double complex *sample);
+
+uint16_t Magnitude(int16_t real, int16_t image);
 
 #endif
